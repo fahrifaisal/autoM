@@ -28,9 +28,8 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        # Membangun EXE dari file yang sudah diobfusikasi
-        pyinstaller --onefile --name FishingM obfuscated/fishing.py
-
+        # Membangun EXE dari file yang sudah diobfusikasi dan memaksa memasukkan library eksternal
+        pyinstaller --onefile --name FishingM --hidden-import cv2 --hidden-import numpy --hidden-import dxcam obfuscated/fishing.py
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
