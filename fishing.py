@@ -121,10 +121,10 @@ def smooth_move_mouse(target_x, target_y, steps=20, duration=0.25):
 
 def auto_collect_fish(scale_x, scale_y):
     print("\n>>> TARGET TERCAPAI! Mengeksekusi Auto-Collect...")
-    time.sleep(0.8) 
+    time.sleep(0.6) 
     
-    base_x = random.randint(800, 840)
-    base_y = random.randint(930, 960)
+    base_x = random.randint(800, 850)
+    base_y = random.randint(930, 940)
     
     collect_x = int(base_x * scale_x)
     collect_y = int(base_y * scale_y)
