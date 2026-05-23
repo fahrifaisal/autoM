@@ -72,13 +72,13 @@ def safe_mouse_up():
         mouse_is_pressed = False
 
 def single_click():
-    duration = random.uniform(0.04, 0.08) 
+    duration = random.uniform(0.04, 0.07) 
     safe_mouse_down()
     time.sleep(duration)
     safe_mouse_up()
 
-def press_key_3():
-    hexKeyCode = 0x04 
+# [BARU] Fungsi menahan tombol keyboard berdasarkan Scan Code
+def hold_key_scancode(hexKeyCode, duration):
     extra = ctypes.c_ulong(0)
     
     ii_down = Input_I()
@@ -86,12 +86,16 @@ def press_key_3():
     x_down = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_down)
     ctypes.windll.user32.SendInput(1, ctypes.pointer(x_down), ctypes.sizeof(x_down))
     
-    time.sleep(random.uniform(0.1, 0.2)) 
+    time.sleep(duration)
     
     ii_up = Input_I()
     ii_up.ki = KeyBdInput(0, hexKeyCode, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
     x_up = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_up)
     ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), ctypes.sizeof(x_up))
+
+# [BARU] Fungsi menekan tombol sekali (tap)
+def tap_key_scancode(hexKeyCode):
+    hold_key_scancode(hexKeyCode, random.uniform(0.1, 0.2))
 
 def is_key_pressed(vk_code):
     return (ctypes.windll.user32.GetAsyncKeyState(vk_code) & 0x8000) != 0
@@ -115,23 +119,49 @@ def smooth_move_mouse(target_x, target_y, steps=20, duration=0.25):
         ctypes.windll.user32.SetCursorPos(curr_x, curr_y)
         time.sleep(sleep_time)
 
-def auto_collect_fish():
+def auto_collect_fish(scale_x, scale_y):
     print("\n>>> TARGET TERCAPAI! Mengeksekusi Auto-Collect...")
     time.sleep(0.8) 
     
-    collect_x, collect_y = 800, 930
+    base_x = random.randint(800, 840)
+    base_y = random.randint(930, 960)
+    
+    collect_x = int(base_x * scale_x)
+    collect_y = int(base_y * scale_y)
+    
     smooth_move_mouse(collect_x, collect_y)
     
     time.sleep(random.uniform(0.1, 0.2)) 
     single_click()
-    print(">>> Auto-Collect Selesai.\n")
+    print(f">>> Auto-Collect Selesai di koordinat (X:{collect_x}, Y:{collect_y}).\n")
+
+# [BARU] Eksekutor Rutinitas AFK & Makan
+def perform_afk_routine():
+    print("\n>>> [AFK ROUTINE] Memulai Anti-AFK & Makan/Minum...")
+    
+    print(">>> Menahan [D] selama 2 detik...")
+    hold_key_scancode(0x20, 2.0) # Scan code D = 0x20
+    
+    print(">>> Menahan [A] selama 2 detik...")
+    hold_key_scancode(0x1E, 2.0) # Scan code A = 0x1E
+    
+    print(">>> Menahan [W] selama 0.5 detik...")
+    hold_key_scancode(0x11, 0.5) # Scan code W = 0x11
+    
+    print(">>> Makan (Tekan 4), jeda 6 detik...")
+    tap_key_scancode(0x05)       # Scan code 4 = 0x05
+    time.sleep(6.0)
+    
+    print(">>> Minum (Tekan 5), jeda 6 detik...")
+    tap_key_scancode(0x06)       # Scan code 5 = 0x06
+    time.sleep(6.0)
+    
+    print(">>> [AFK ROUTINE] Selesai.\n")
 
 # ==========================================
 # 2. LOGIKA UTAMA BOT PANCING
 # ==========================================
 def run_fishing_bot():
-    # --- SISTEM CONFIG.INI ---
-    # Memastikan file config berada di folder yang sama dengan file .exe
     if getattr(sys, 'frozen', False):
         application_path = os.path.dirname(sys.executable)
     else:
@@ -140,30 +170,39 @@ def run_fishing_bot():
     config_file_path = os.path.join(application_path, 'config.ini')
     config = configparser.ConfigParser()
 
-    # Buat default config jika file tidak ada
     if not os.path.exists(config_file_path):
         config['ENGINE'] = {
+            'SCREEN_WIDTH': '1920',
+            'SCREEN_HEIGHT': '1080',
             'ABSOLUTE_MAX_GREEN': '350',
             'SAFETY_BUFFER': '15',
             'MIN_SWING': '120',
             'MAX_BAND_HIGH': '100',
-            'TIMEOUT_SECONDS': '60'
+            'TIMEOUT_SECONDS': '60',
+            'AFK_INTERVAL_MINUTES': '40' # [BARU] Konfigurasi Waktu AFK
         }
         with open(config_file_path, 'w') as configfile:
             config.write(configfile)
 
     config.read(config_file_path)
     
-    # Load variabel dari config
-    ABSOLUTE_MAX_GREEN = int(config['ENGINE'].get('ABSOLUTE_MAX_GREEN', '350'))
-    SAFETY_BUFFER = int(config['ENGINE'].get('SAFETY_BUFFER', '15'))
-    MIN_SWING = int(config['ENGINE'].get('MIN_SWING', '120'))
-    MAX_BAND_HIGH = int(config['ENGINE'].get('MAX_BAND_HIGH', '100'))
+    SCREEN_WIDTH = int(config['ENGINE'].get('SCREEN_WIDTH', '1920'))
+    SCREEN_HEIGHT = int(config['ENGINE'].get('SCREEN_HEIGHT', '1080'))
     TIMEOUT_SECONDS = int(config['ENGINE'].get('TIMEOUT_SECONDS', '60'))
+    AFK_INTERVAL_MINUTES = float(config['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
+    
+    scale_x = SCREEN_WIDTH / 1920.0
+    scale_y = SCREEN_HEIGHT / 1080.0
 
-    # ---------------------------
+    ABSOLUTE_MAX_GREEN = int(int(config['ENGINE'].get('ABSOLUTE_MAX_GREEN', '350')) * scale_y)
+    SAFETY_BUFFER = int(int(config['ENGINE'].get('SAFETY_BUFFER', '15')) * scale_y)
+    MIN_SWING = int(int(config['ENGINE'].get('MIN_SWING', '120')) * scale_y)
+    MAX_BAND_HIGH = int(int(config['ENGINE'].get('MAX_BAND_HIGH', '100')) * scale_y)
 
-    left, top, right, bottom = 500, 250, 1500, 1080 
+    left   = int(500 * scale_x)
+    top    = int(250 * scale_y)
+    right  = int(1500 * scale_x)
+    bottom = int(1080 * scale_y)
     region = (left, top, right, bottom)
     
     camera = dxcam.create(output_color="BGR")
@@ -172,6 +211,11 @@ def run_fishing_bot():
     state = "FASE_0_STANDBY"
     is_debug_mode = False
     debug_key_pressed = False
+    
+    # [BARU] Variabel AFK Mode
+    afk_mode_enabled = False
+    afk_key_pressed = False
+    last_afk_time = time.time()
     
     phase3_start_time = 0
     last_seen_time = 0 
@@ -194,12 +238,14 @@ def run_fishing_bot():
 
     print("========================================")
     print("      FISHING PIXEL BOT (OBFUSCATED)    ")
-    print("  Logic: Extreme Momentum & Delta Ctrl  ")
+    print("  Logic: Scaler Ctrl + AFK Auto-Eat     ")
     print("========================================")
-    print(f"[CONFIG LOADED] Max Green: {ABSOLUTE_MAX_GREEN}, Swing: {MIN_SWING}")
+    print(f"[CONFIG] Monitor : {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+    print(f"[CONFIG] AFK Int : {AFK_INTERVAL_MINUTES} Menit")
     print("========================================")
     print("[8] - Toggle Live Debug View")
     print("[9] - Exit Program")
+    print("[7] - TOGGLE AUTO-EAT/AFK MODE")
     print("[3] - MANUALLY START FISHING")
     print("[X] - PANIC BUTTON (Reset to Standby)")
     print("========================================")
@@ -215,6 +261,16 @@ def run_fishing_bot():
                     debug_key_pressed = True
             else:
                 debug_key_pressed = False
+
+            # [BARU] Toggle sistem AFK dengan tombol 7
+            if is_key_pressed(0x37): 
+                if not afk_key_pressed:
+                    afk_mode_enabled = not afk_mode_enabled
+                    status = "ON" if afk_mode_enabled else "OFF"
+                    print(f"\n[!] AUTO-EAT / AFK MODE: {status}")
+                    afk_key_pressed = True
+            else:
+                afk_key_pressed = False
 
             if is_key_pressed(0x58): 
                 if state != "FASE_0_STANDBY":
@@ -245,7 +301,7 @@ def run_fishing_bot():
             elif state == "FASE_1_WAITING":
                 if time.time() - fase1_start_time > TIMEOUT_SECONDS: 
                     print(f"\n[!] TIMEOUT: Tidak ada ikan setelah {TIMEOUT_SECONDS} detik.")
-                    press_key_3()
+                    tap_key_scancode(0x04) # Scan code 3 = 0x04
                     fase1_start_time = time.time() 
                     time.sleep(1.0) 
                     continue 
@@ -259,7 +315,11 @@ def run_fishing_bot():
                     if cv2.contourArea(c) > 20: 
                         x, y, w, h = cv2.boundingRect(c)
                         
-                        if (3 <= h <= 15) and w > 80 and w > (h * 5):
+                        min_h = max(2, int(3 * scale_y))
+                        max_h = int(15 * scale_y)
+                        min_w = int(80 * scale_x)
+                        
+                        if (min_h <= h <= max_h) and w > min_w and w > (h * 5):
                             action_text = "FASE 2 DETECTED! HOOKING..."
                             single_click()
                             time.sleep(0.5) 
@@ -299,7 +359,7 @@ def run_fishing_bot():
                     if cv2.contourArea(c_g) > 20: 
                         x, y, w, h = cv2.boundingRect(c_g)
                         
-                        if h > 10 and h > (w * 1.5) and w < 60:
+                        if h > int(10 * scale_y) and h > (w * 1.5) and w < int(60 * scale_x):
                             valid_bar_found = True
                             bar_ever_found = True 
                             last_seen_time = time.time() 
@@ -309,9 +369,9 @@ def run_fishing_bot():
                                 for cw in contours_w:
                                     if cv2.contourArea(cw) >= 2: 
                                         xw, yw, ww, hw = cv2.boundingRect(cw)
-                                        if hw >= 2 and ww < 30:
+                                        if hw >= 2 and ww < int(30 * scale_x):
                                             gap = x - (xw + ww)
-                                            if abs(y - yw) < 20 and (5 <= gap <= 40):
+                                            if abs(y - yw) < int(20 * scale_y) and (int(5 * scale_x) <= gap <= int(40 * scale_x)):
                                                 white_h = hw
                                                 if white_h > max_white_h: 
                                                     max_white_h = white_h
@@ -329,15 +389,23 @@ def run_fishing_bot():
 
                             max_safe_selisih = ABSOLUTE_MAX_GREEN - white_h - SAFETY_BUFFER
 
-                            BAND_HIGH = max(10, min(MAX_BAND_HIGH, max_safe_selisih))
+                            BAND_HIGH = max(int(10 * scale_y), min(MAX_BAND_HIGH, max_safe_selisih))
+                            
+                            if white_h < int(40 * scale_y):
+                                BAND_HIGH = max(BAND_HIGH, int(130 * scale_y))
+
                             BAND_LOW = BAND_HIGH - MIN_SWING
+
+                            min_green_floor = int(45 * scale_y)
+                            if (white_h + BAND_LOW) < min_green_floor:
+                                BAND_LOW = min_green_floor - white_h
 
                             BAND_HIGH = int(BAND_HIGH * random.uniform(0.98, 1.02))
                             BAND_LOW  = int(BAND_LOW  * random.uniform(0.98, 1.02))
 
-                            delta_clamp = max(-15, min(15, delta_selisih))
+                            delta_clamp = max(int(-15 * scale_y), min(int(15 * scale_y), delta_selisih))
                             
-                            effective_band_high = max(BAND_LOW + 10, BAND_HIGH - max(0, delta_clamp))
+                            effective_band_high = max(BAND_LOW + int(10 * scale_y), BAND_HIGH - max(0, delta_clamp))
                             effective_band_low  = BAND_LOW + min(0, delta_clamp)
 
                             if is_cooling_down:
@@ -347,7 +415,7 @@ def run_fishing_bot():
                                 if selisih >= effective_band_high:
                                     is_cooling_down = True
 
-                            if grad_h >= (ABSOLUTE_MAX_GREEN - 5):
+                            if grad_h >= (ABSOLUTE_MAX_GREEN - int(5 * scale_y)):
                                 is_cooling_down = True
                                 rescue_mode = True
 
@@ -396,14 +464,24 @@ def run_fishing_bot():
                     else:
                         safe_mouse_up()
                         
-                        if max_white_h >= 320: 
-                            auto_collect_fish()
+                        finish_line = int(320 * scale_y)
+                        if max_white_h >= finish_line: 
+                            auto_collect_fish(scale_x, scale_y)
+                            
+                            # =========================================
+                            # [BARU] TRIGGER RUTINITAS AFK & MAKAN
+                            # =========================================
+                            if afk_mode_enabled:
+                                current_time = time.time()
+                                if (current_time - last_afk_time) >= (AFK_INTERVAL_MINUTES * 60):
+                                    perform_afk_routine()
+                                    last_afk_time = time.time()
                         else:
-                            print(f">>> Gagal / Putus (Max White Bar hanya: {max_white_h}px)\n")
+                            print(f">>> Gagal / Putus (Max White Bar: {max_white_h}px | Target: {finish_line}px)\n")
                         
                         print(">>> Siklus Selesai. Melempar pancingan baru dalam 4 detik...")
                         time.sleep(4.0)
-                        press_key_3()
+                        tap_key_scancode(0x04) # Scan code 3 = 0x04
                         
                         action_text = "AUTO-CASTING..."
                         state = "FASE_1_WAITING" 
@@ -414,6 +492,14 @@ def run_fishing_bot():
             if is_debug_mode and debug_frame is not None:
                 cv2.putText(debug_frame, f"State: {state}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
                 cv2.putText(debug_frame, f"Action: {action_text}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, action_color, 2)
+                
+                # Tampilan Status AFK di Debug
+                afk_status = "ON" if afk_mode_enabled else "OFF"
+                cv2.putText(debug_frame, f"AFK Mode: {afk_status}", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                if afk_mode_enabled:
+                    time_left = max(0, (AFK_INTERVAL_MINUTES * 60) - (time.time() - last_afk_time))
+                    cv2.putText(debug_frame, f"AFK Timer: {int(time_left)}s", (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                
                 cv2.imshow("Live Debug", debug_frame)
             
             if cv2.waitKey(1) & 0xFF == ord('q'):
