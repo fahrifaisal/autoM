@@ -119,7 +119,7 @@ def smooth_move_mouse(target_x, target_y, steps=20, duration=0.25):
 
 def auto_collect_fish(scale_x, scale_y):
     print("\n>>> TARGET TERCAPAI! Mengeksekusi Auto-Collect...")
-    time.sleep(0.8) 
+    time.sleep(0.75) 
     
     base_x = random.randint(800, 850)
     base_y = random.randint(920, 940)
@@ -321,7 +321,7 @@ def run_fishing_bot():
                         if (min_h <= h <= max_h) and w > min_w and w > (h * 5):
                             action_text = "FASE 2 DETECTED! HOOKING..."
                             single_click()
-                            time.sleep(0.7) 
+                            time.sleep(0.5) 
                             
                             safe_mouse_down() 
                             is_cooling_down = False 
