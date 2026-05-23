@@ -28,8 +28,9 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        # Membangun EXE dari file yang sudah diobfusikasi dan memaksa memasukkan library eksternal
-        pyinstaller --onefile --name FishingM --hidden-import cv2 --hidden-import numpy --hidden-import dxcam obfuscated/fishing.py
+        # Memaksa memasukkan semua library eksternal DAN built-in yang disembunyikan PyArmor
+        pyinstaller --onefile --name FishingM --hidden-import cv2 --hidden-import numpy --hidden-import dxcam --hidden-import configparser --hidden-import ctypes obfuscated/fishing.py
+        
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
