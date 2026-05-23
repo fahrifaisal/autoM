@@ -173,8 +173,10 @@ def run_fishing_bot():
             'SCREEN_HEIGHT': '1080',
             'ABSOLUTE_MAX_GREEN': '350',
             'SAFETY_BUFFER': '15',
-            'MIN_SWING': '120',
             'MAX_BAND_HIGH': '100',
+            'MIN_SWING': '120',
+            'TIGHT_GRIP_THRESHOLD': '80',
+            'TIGHT_GRIP_SWING': '50',
             'TIMEOUT_SECONDS': '60',
             'AFK_INTERVAL_MINUTES': '40'
         }
@@ -195,6 +197,8 @@ def run_fishing_bot():
     SAFETY_BUFFER = int(int(config['ENGINE'].get('SAFETY_BUFFER', '15')) * scale_y)
     MIN_SWING = int(int(config['ENGINE'].get('MIN_SWING', '120')) * scale_y)
     MAX_BAND_HIGH = int(int(config['ENGINE'].get('MAX_BAND_HIGH', '100')) * scale_y)
+    TIGHT_GRIP_THRESHOLD = int(int(config['ENGINE'].get('TIGHT_GRIP_THRESHOLD', '80')) * scale_y)
+    TIGHT_GRIP_SWING = int(int(config['ENGINE'].get('TIGHT_GRIP_SWING', '50')) * scale_y)
 
     left   = int(400 * scale_x)
     top    = int(200 * scale_y)
@@ -234,7 +238,7 @@ def run_fishing_bot():
 
     print("========================================")
     print("      FISHING PIXEL BOT (OBFUSCATED)    ")
-    print("  Logic: Tight Grip & White Bar Rescue  ")
+    print("  Logic: Active White Bar Protection    ")
     print("========================================")
     print(f"[CONFIG] Monitor : {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
     print(f"[CONFIG] AFK Int : {AFK_INTERVAL_MINUTES} Menit")
@@ -386,15 +390,26 @@ def run_fishing_bot():
                             max_safe_selisih = ABSOLUTE_MAX_GREEN - white_h - SAFETY_BUFFER
 
                             # =================================================
-                            # [DIPERBAIKI] TIGHT GRIP ENGINE (Micro-Tap Awal)
+                            # [DIPERBAIKI] DYNAMIC HEALTH-BASED TENSION
+                            # Mengubah gaya ayunan murni berdasarkan sisa bar putih
                             # =================================================
-                            current_swing = MIN_SWING
                             BAND_HIGH = max(int(10 * scale_y), min(MAX_BAND_HIGH, max_safe_selisih))
+                            
+                            if white_h < int(50 * scale_y):
+                                # KRITIS: Ikan memberontak / Hampir mati
+                                current_swing = int(20 * scale_y) # Ayunan sangat sempit (SPAM KLIK)
+                                BAND_HIGH = max(BAND_HIGH, int(80 * scale_y)) # Paksa tarik atas
+                            elif white_h < int(100 * scale_y):
+                                # WASPADA
+                                current_swing = int(55 * scale_y) # Ayunan medium
+                                BAND_HIGH = max(BAND_HIGH, int(100 * scale_y))
+                            else:
+                                # AMAN: Boleh santai
+                                current_swing = MIN_SWING
 
-                            # Jika bar putih di bawah 80px (Level 1 / Awal Main)
-                            if white_h < int(80 * scale_y):
-                                current_swing = int(50 * scale_y) # Ayunan dipersempit, tidak boleh lepas lama!
-                                BAND_HIGH = max(BAND_HIGH, int(110 * scale_y)) # Paksa batas atas tinggi agar narik terus
+                            # Ambil override dari config user jika disetel lebih ketat
+                            if white_h < TIGHT_GRIP_THRESHOLD:
+                                current_swing = min(current_swing, TIGHT_GRIP_SWING) 
 
                             BAND_LOW = BAND_HIGH - current_swing
 
@@ -410,7 +425,6 @@ def run_fishing_bot():
                             effective_band_high = max(BAND_LOW + int(10 * scale_y), BAND_HIGH - max(0, delta_clamp))
                             effective_band_low  = BAND_LOW + min(0, delta_clamp)
 
-                            # Hysteresis Normal
                             if is_cooling_down:
                                 if selisih <= effective_band_low:
                                     is_cooling_down = False
@@ -419,13 +433,13 @@ def run_fishing_bot():
                                     is_cooling_down = True
 
                             # =================================================
-                            # [BARU] WHITE BAR RESCUE (Anti-Merosot Level 1)
+                            # [DIPERBAIKI] AGGRESSIVE WHITE RESCUE
+                            # Bukan lagi menunggu is_cooling_down! Langsung cegat paksa
                             # =================================================
-                            # Jika sedang melepas klik, TAPI bar putih anjlok mendekati 0 (kritis < 30px)
-                            if is_cooling_down and 0 < white_h < int(30 * scale_y):
-                                # Pastikan kita punya ruang aman di bar hijau agar tidak nyundul 350px
-                                if grad_h < (ABSOLUTE_MAX_GREEN - int(30 * scale_y)):
-                                    is_cooling_down = False
+                            if 0 < white_h < int(35 * scale_y):
+                                # Selama bar hijau tidak menyundul batas atas secara kritis (sisa 25px)
+                                if grad_h < (ABSOLUTE_MAX_GREEN - int(25 * scale_y)):
+                                    is_cooling_down = False # PAKSA HOLD!
                                     white_rescue_mode = True
 
                             # Green Peak Rescue (Prioritas Tertinggi)
@@ -444,7 +458,7 @@ def run_fishing_bot():
                                     action_text = f"RESCUE GREEN! -> RELEASE PAKSA"
                                     action_color = (255, 100, 255) 
                                 elif white_rescue_mode:
-                                    action_text = f"WHITE RESCUE! -> HOLD PAKSA"
+                                    action_text = f"WHITE RESCUE! -> HOLD PAKSA (SPAM)"
                                     action_color = (0, 255, 255)
                                 else:
                                     action_text = f"SEL:{selisih:+d} BND:[{BAND_LOW}~{BAND_HIGH}] -> HOLD"
