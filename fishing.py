@@ -121,10 +121,10 @@ def smooth_move_mouse(target_x, target_y, steps=20, duration=0.25):
 
 def auto_collect_fish(scale_x, scale_y):
     print("\n>>> TARGET TERCAPAI! Mengeksekusi Auto-Collect...")
-    time.sleep(0.6) 
+    time.sleep(0.8) 
     
     base_x = random.randint(800, 850)
-    base_y = random.randint(930, 940)
+    base_y = random.randint(920, 940)
     
     collect_x = int(base_x * scale_x)
     collect_y = int(base_y * scale_y)
@@ -199,10 +199,10 @@ def run_fishing_bot():
     MIN_SWING = int(int(config['ENGINE'].get('MIN_SWING', '120')) * scale_y)
     MAX_BAND_HIGH = int(int(config['ENGINE'].get('MAX_BAND_HIGH', '100')) * scale_y)
 
-    left   = int(500 * scale_x)
-    top    = int(250 * scale_y)
-    right  = int(1500 * scale_x)
-    bottom = int(1080 * scale_y)
+    left   = int(400 * scale_x)
+    top    = int(200 * scale_y)
+    right  = int(1600 * scale_x)
+    bottom = int(1000 * scale_y)
     region = (left, top, right, bottom)
     
     camera = dxcam.create(output_color="BGR")
@@ -322,7 +322,7 @@ def run_fishing_bot():
                         if (min_h <= h <= max_h) and w > min_w and w > (h * 5):
                             action_text = "FASE 2 DETECTED! HOOKING..."
                             single_click()
-                            time.sleep(0.5) 
+                            time.sleep(0.7) 
                             
                             safe_mouse_down() 
                             is_cooling_down = False 
@@ -480,7 +480,7 @@ def run_fishing_bot():
                             print(f">>> Gagal / Putus (Max White Bar: {max_white_h}px | Target: {finish_line}px)\n")
                         
                         print(">>> Siklus Selesai. Melempar pancingan baru dalam 4 detik...")
-                        time.sleep(4.0)
+                        time.sleep(4.7)
                         tap_key_scancode(0x04) # Scan code 3 = 0x04
                         
                         action_text = "AUTO-CASTING..."
