@@ -77,7 +77,6 @@ def single_click():
     time.sleep(duration)
     safe_mouse_up()
 
-# [BARU] Fungsi menahan tombol keyboard berdasarkan Scan Code
 def hold_key_scancode(hexKeyCode, duration):
     extra = ctypes.c_ulong(0)
     
@@ -93,7 +92,6 @@ def hold_key_scancode(hexKeyCode, duration):
     x_up = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_up)
     ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), ctypes.sizeof(x_up))
 
-# [BARU] Fungsi menekan tombol sekali (tap)
 def tap_key_scancode(hexKeyCode):
     hold_key_scancode(hexKeyCode, random.uniform(0.1, 0.2))
 
@@ -135,25 +133,24 @@ def auto_collect_fish(scale_x, scale_y):
     single_click()
     print(f">>> Auto-Collect Selesai di koordinat (X:{collect_x}, Y:{collect_y}).\n")
 
-# [BARU] Eksekutor Rutinitas AFK & Makan
 def perform_afk_routine():
     print("\n>>> [AFK ROUTINE] Memulai Anti-AFK & Makan/Minum...")
     
     print(">>> Menahan [D] selama 2 detik...")
-    hold_key_scancode(0x20, 2.0) # Scan code D = 0x20
+    hold_key_scancode(0x20, 2.0)
     
     print(">>> Menahan [A] selama 2 detik...")
-    hold_key_scancode(0x1E, 2.0) # Scan code A = 0x1E
+    hold_key_scancode(0x1E, 2.0)
     
     print(">>> Menahan [W] selama 0.5 detik...")
-    hold_key_scancode(0x11, 0.5) # Scan code W = 0x11
+    hold_key_scancode(0x11, 0.5)
     
     print(">>> Makan (Tekan 4), jeda 6 detik...")
-    tap_key_scancode(0x05)       # Scan code 4 = 0x05
+    tap_key_scancode(0x05)
     time.sleep(6.0)
     
     print(">>> Minum (Tekan 5), jeda 6 detik...")
-    tap_key_scancode(0x06)       # Scan code 5 = 0x06
+    tap_key_scancode(0x06)
     time.sleep(6.0)
     
     print(">>> [AFK ROUTINE] Selesai.\n")
@@ -179,7 +176,7 @@ def run_fishing_bot():
             'MIN_SWING': '120',
             'MAX_BAND_HIGH': '100',
             'TIMEOUT_SECONDS': '60',
-            'AFK_INTERVAL_MINUTES': '40' # [BARU] Konfigurasi Waktu AFK
+            'AFK_INTERVAL_MINUTES': '40'
         }
         with open(config_file_path, 'w') as configfile:
             config.write(configfile)
@@ -212,7 +209,6 @@ def run_fishing_bot():
     is_debug_mode = False
     debug_key_pressed = False
     
-    # [BARU] Variabel AFK Mode
     afk_mode_enabled = False
     afk_key_pressed = False
     last_afk_time = time.time()
@@ -238,7 +234,7 @@ def run_fishing_bot():
 
     print("========================================")
     print("      FISHING PIXEL BOT (OBFUSCATED)    ")
-    print("  Logic: Scaler Ctrl + AFK Auto-Eat     ")
+    print("  Logic: Tight Grip & White Bar Rescue  ")
     print("========================================")
     print(f"[CONFIG] Monitor : {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
     print(f"[CONFIG] AFK Int : {AFK_INTERVAL_MINUTES} Menit")
@@ -262,7 +258,6 @@ def run_fishing_bot():
             else:
                 debug_key_pressed = False
 
-            # [BARU] Toggle sistem AFK dengan tombol 7
             if is_key_pressed(0x37): 
                 if not afk_key_pressed:
                     afk_mode_enabled = not afk_mode_enabled
@@ -301,7 +296,7 @@ def run_fishing_bot():
             elif state == "FASE_1_WAITING":
                 if time.time() - fase1_start_time > TIMEOUT_SECONDS: 
                     print(f"\n[!] TIMEOUT: Tidak ada ikan setelah {TIMEOUT_SECONDS} detik.")
-                    tap_key_scancode(0x04) # Scan code 3 = 0x04
+                    tap_key_scancode(0x04)
                     fase1_start_time = time.time() 
                     time.sleep(1.0) 
                     continue 
@@ -353,6 +348,7 @@ def run_fishing_bot():
                 grad_h = 0
                 white_h = 0
                 rescue_mode = False
+                white_rescue_mode = False
 
                 if contours_g:
                     c_g = max(contours_g, key=cv2.contourArea)
@@ -389,12 +385,18 @@ def run_fishing_bot():
 
                             max_safe_selisih = ABSOLUTE_MAX_GREEN - white_h - SAFETY_BUFFER
 
+                            # =================================================
+                            # [DIPERBAIKI] TIGHT GRIP ENGINE (Micro-Tap Awal)
+                            # =================================================
+                            current_swing = MIN_SWING
                             BAND_HIGH = max(int(10 * scale_y), min(MAX_BAND_HIGH, max_safe_selisih))
-                            
-                            if white_h < int(40 * scale_y):
-                                BAND_HIGH = max(BAND_HIGH, int(130 * scale_y))
 
-                            BAND_LOW = BAND_HIGH - MIN_SWING
+                            # Jika bar putih di bawah 80px (Level 1 / Awal Main)
+                            if white_h < int(80 * scale_y):
+                                current_swing = int(50 * scale_y) # Ayunan dipersempit, tidak boleh lepas lama!
+                                BAND_HIGH = max(BAND_HIGH, int(110 * scale_y)) # Paksa batas atas tinggi agar narik terus
+
+                            BAND_LOW = BAND_HIGH - current_swing
 
                             min_green_floor = int(45 * scale_y)
                             if (white_h + BAND_LOW) < min_green_floor:
@@ -408,6 +410,7 @@ def run_fishing_bot():
                             effective_band_high = max(BAND_LOW + int(10 * scale_y), BAND_HIGH - max(0, delta_clamp))
                             effective_band_low  = BAND_LOW + min(0, delta_clamp)
 
+                            # Hysteresis Normal
                             if is_cooling_down:
                                 if selisih <= effective_band_low:
                                     is_cooling_down = False
@@ -415,21 +418,36 @@ def run_fishing_bot():
                                 if selisih >= effective_band_high:
                                     is_cooling_down = True
 
+                            # =================================================
+                            # [BARU] WHITE BAR RESCUE (Anti-Merosot Level 1)
+                            # =================================================
+                            # Jika sedang melepas klik, TAPI bar putih anjlok mendekati 0 (kritis < 30px)
+                            if is_cooling_down and 0 < white_h < int(30 * scale_y):
+                                # Pastikan kita punya ruang aman di bar hijau agar tidak nyundul 350px
+                                if grad_h < (ABSOLUTE_MAX_GREEN - int(30 * scale_y)):
+                                    is_cooling_down = False
+                                    white_rescue_mode = True
+
+                            # Green Peak Rescue (Prioritas Tertinggi)
                             if grad_h >= (ABSOLUTE_MAX_GREEN - int(5 * scale_y)):
                                 is_cooling_down = True
                                 rescue_mode = True
+                                white_rescue_mode = False
 
                             if is_cooling_down:
                                 safe_mouse_up()
-                                action_text = f"SEL:{selisih:+d} dSEL:{delta_selisih:+d} BND:[{BAND_LOW}~{BAND_HIGH}] -> RELEASE"
+                                action_text = f"SEL:{selisih:+d} BND:[{BAND_LOW}~{BAND_HIGH}] -> RELEASE"
                                 action_color = (0, 0, 255) 
                             else:
                                 safe_mouse_down()
                                 if rescue_mode:
-                                    action_text = f"RESCUE! GREEN AT PEAK -> RELEASE PAKSA"
+                                    action_text = f"RESCUE GREEN! -> RELEASE PAKSA"
                                     action_color = (255, 100, 255) 
+                                elif white_rescue_mode:
+                                    action_text = f"WHITE RESCUE! -> HOLD PAKSA"
+                                    action_color = (0, 255, 255)
                                 else:
-                                    action_text = f"SEL:{selisih:+d} dSEL:{delta_selisih:+d} BND:[{BAND_LOW}~{BAND_HIGH}] -> HOLD"
+                                    action_text = f"SEL:{selisih:+d} BND:[{BAND_LOW}~{BAND_HIGH}] -> HOLD"
                                     action_color = (0, 255, 0) 
 
                             if is_debug_mode:
@@ -468,9 +486,6 @@ def run_fishing_bot():
                         if max_white_h >= finish_line: 
                             auto_collect_fish(scale_x, scale_y)
                             
-                            # =========================================
-                            # [BARU] TRIGGER RUTINITAS AFK & MAKAN
-                            # =========================================
                             if afk_mode_enabled:
                                 current_time = time.time()
                                 if (current_time - last_afk_time) >= (AFK_INTERVAL_MINUTES * 60):
@@ -481,7 +496,7 @@ def run_fishing_bot():
                         
                         print(">>> Siklus Selesai. Melempar pancingan baru dalam 4 detik...")
                         time.sleep(4.7)
-                        tap_key_scancode(0x04) # Scan code 3 = 0x04
+                        tap_key_scancode(0x04)
                         
                         action_text = "AUTO-CASTING..."
                         state = "FASE_1_WAITING" 
@@ -493,7 +508,6 @@ def run_fishing_bot():
                 cv2.putText(debug_frame, f"State: {state}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
                 cv2.putText(debug_frame, f"Action: {action_text}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, action_color, 2)
                 
-                # Tampilan Status AFK di Debug
                 afk_status = "ON" if afk_mode_enabled else "OFF"
                 cv2.putText(debug_frame, f"AFK Mode: {afk_status}", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
                 if afk_mode_enabled:
