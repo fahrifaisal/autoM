@@ -30,10 +30,10 @@ jobs:
     - name: Build with PyInstaller
       run: |
         # Membangun EXE dari file yang sudah diobfusikasi
-        pyinstaller --onefile --name FishingBot obfuscated/bot.py
+        pyinstaller --onefile --name FishingM obfuscated/fishing.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: FishingBot-Protected-EXE
-        path: dist/FishingBot.exe
+        name: FishingM-Protected-EXE
+        path: dist/FishingM.exe
