@@ -1,0 +1,39 @@
+name: Build Obfuscated EXE
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: # Mengizinkan trigger manual dari tab Actions
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install opencv-python numpy dxcam pyarmor pyinstaller
+
+    - name: Obfuscate Code with PyArmor
+      run: |
+        pyarmor gen -O obfuscated fishing.py
+
+    - name: Build with PyInstaller
+      run: |
+        # Membangun EXE dari file yang sudah diobfusikasi
+        pyinstaller --onefile --name FishingBot obfuscated/bot.py
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: FishingBot-Protected-EXE
+        path: dist/FishingBot.exe
