@@ -326,7 +326,7 @@ def run_fishing_bot():
                             action_text = "FASE 2 DETECTED! HOOKING..."
                             single_click()
                             
-                            time.sleep(0.1) 
+                            time.sleep(0.25) 
                             safe_mouse_up() 
                             
                             is_cooling_down = True 
@@ -499,7 +499,7 @@ def run_fishing_bot():
                     time_in_phase3 = time.time() - phase3_start_time
                     
                     # Cek riwayat: Jika max_white_h < 10px, berarti bar putih belum pernah stabil!
-                    # Skrip akan MEMAKSA hold tanpa peduli apa pun selama 3 detik awal!
+                    # Skrip akan MEMAKSA hold tanpa peduli apa pun selama 2 detik awal!
                     if time_in_phase3 < 2.0 and max_white_h < int(10 * scale_y):
                         safe_mouse_down()
                         action_text = "INITIAL PULL (FORCED TENSION)..."
