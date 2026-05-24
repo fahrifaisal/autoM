@@ -9,6 +9,19 @@ import os
 import sys
 
 # ==========================================
+# [BARU] DPI AWARENESS FIX (Untuk Laptop 125%-150% Scale)
+# Memaksa Python membaca resolusi piksel murni dari monitor
+# ==========================================
+if sys.platform == "win32":
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+# ==========================================
 # 1. SETUP MICROSOFT SENDINPUT (MOUSE & KEYBOARD)
 # ==========================================
 PUL = ctypes.POINTER(ctypes.c_ulong)
@@ -90,7 +103,8 @@ def hold_key_scancode(hexKeyCode, duration):
     ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), ctypes.sizeof(x_up))
 
 def tap_key_scancode(hexKeyCode):
-    hold_key_scancode(hexKeyCode, random.uniform(0.1, 0.2))
+    # Durasi tap sedikit diperlama agar game yang sedang memproses animasi tidak melewatkannya
+    hold_key_scancode(hexKeyCode, random.uniform(0.15, 0.25))
 
 def is_key_pressed(vk_code):
     return (ctypes.windll.user32.GetAsyncKeyState(vk_code) & 0x8000) != 0
@@ -157,15 +171,16 @@ def run_fishing_bot():
         config['ENGINE'] = {
             'SCREEN_WIDTH': '1920',
             'SCREEN_HEIGHT': '1080',
-            'ABSOLUTE_MAX_GREEN': '400',   # [DIPERBAIKI] Dinaikkan dari 380 ke 400 agar kuat menampung bar putih 405px
-            'SUCCESS_THRESHOLD': '380',    # [BARU] Batas riwayat max_white untuk deklarasi Sukses
+            'ABSOLUTE_MAX_GREEN': '360',  
+            'SUCCESS_THRESHOLD': '340',   
             'SAFETY_BUFFER': '15',
             'MAX_BAND_HIGH': '100',
             'MIN_SWING': '120',
             'TIGHT_GRIP_THRESHOLD': '80',
             'TIGHT_GRIP_SWING': '50',
             'TIMEOUT_SECONDS': '60',
-            'AFK_INTERVAL_MINUTES': '40'
+            'AFK_INTERVAL_MINUTES': '40',
+            'CAST_DELAY_SECONDS': '4.8'  # [BARU] Jeda waktu untuk melempar pancing ulang
         }
         with open(config_file_path, 'w') as configfile:
             config.write(configfile)
@@ -176,12 +191,13 @@ def run_fishing_bot():
     SCREEN_HEIGHT = int(config['ENGINE'].get('SCREEN_HEIGHT', '1080'))
     TIMEOUT_SECONDS = int(config['ENGINE'].get('TIMEOUT_SECONDS', '60'))
     AFK_INTERVAL_MINUTES = float(config['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
+    CAST_DELAY_SECONDS = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '6.0'))
     
     scale_x = SCREEN_WIDTH / 1920.0
     scale_y = SCREEN_HEIGHT / 1080.0
 
-    ABSOLUTE_MAX_GREEN = int(int(config['ENGINE'].get('ABSOLUTE_MAX_GREEN', '400')) * scale_y)
-    SUCCESS_THRESHOLD = int(int(config['ENGINE'].get('SUCCESS_THRESHOLD', '380')) * scale_y)
+    ABSOLUTE_MAX_GREEN = int(int(config['ENGINE'].get('ABSOLUTE_MAX_GREEN', '360')) * scale_y)
+    SUCCESS_THRESHOLD = int(int(config['ENGINE'].get('SUCCESS_THRESHOLD', '340')) * scale_y)
     SAFETY_BUFFER = int(int(config['ENGINE'].get('SAFETY_BUFFER', '15')) * scale_y)
     MIN_SWING = int(int(config['ENGINE'].get('MIN_SWING', '120')) * scale_y)
     MAX_BAND_HIGH = int(int(config['ENGINE'].get('MAX_BAND_HIGH', '100')) * scale_y)
@@ -191,7 +207,7 @@ def run_fishing_bot():
     left   = int(400 * scale_x)
     top    = int(200 * scale_y)
     right  = int(1600 * scale_x)
-    bottom = int(1000 * scale_y)
+    bottom = int(1080 * scale_y) 
     region = (left, top, right, bottom)
     
     camera = dxcam.create(output_color="BGR")
@@ -216,7 +232,7 @@ def run_fishing_bot():
     upper_grad = np.array([50, 255, 255])
     
     lower_white = np.array([0, 0, 160])
-    upper_white = np.array([100, 100, 255])
+    upper_white = np.array([179, 50, 255])
 
     prev_grad_h = 0
     prev_white_h = 0
@@ -225,11 +241,11 @@ def run_fishing_bot():
 
     print("========================================")
     print("      FISHING PIXEL BOT (OBFUSCATED)    ")
-    print(" Logic: Historical Vanish Trigger       ")
+    print("  Logic: Forced Tension & Cast Delay    ")
     print("========================================")
-    print(f"[CONFIG] Monitor : {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+    print(f"[CONFIG] Monitor : {SCREEN_WIDTH}x{SCREEN_HEIGHT} (DPI Fixed)")
     print(f"[CONFIG] Max Grn : {ABSOLUTE_MAX_GREEN} | Sukses: >{SUCCESS_THRESHOLD}")
-    print(f"[CONFIG] AFK Int : {AFK_INTERVAL_MINUTES} Menit")
+    print(f"[CONFIG] Cast Dly: {CAST_DELAY_SECONDS} Detik")
     print("========================================")
     print("[8] - Toggle Live Debug View")
     print("[9] - Exit Program")
@@ -328,6 +344,14 @@ def run_fishing_bot():
                             action_text = f"NOISE REJ (W:{w} H:{h})"
 
             elif state == "FASE_3_MINIGAME":
+                
+                if time.time() - phase3_start_time > 240:
+                    safe_mouse_up()
+                    print("\n[!] MINIGAME TIMEOUT (Terlalu Lama). Memutus paksa...")
+                    state = "FASE_1_WAITING"
+                    fase1_start_time = time.time()
+                    continue
+
                 hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
                 mask_grad = cv2.inRange(hsv_frame, lower_grad, upper_grad)
                 mask_white = cv2.inRange(hsv_frame, lower_white, upper_white)
@@ -349,7 +373,14 @@ def run_fishing_bot():
                         if cv2.contourArea(cw) >= 2: 
                             x_tmp, y_tmp, w_tmp, h_tmp = cv2.boundingRect(cw)
                             
-                            if h_tmp >= int(5 * scale_y) and w_tmp <= int(18 * scale_x) and h_tmp >= (w_tmp * 1.5):
+                            w_min = max(1, int(2 * scale_x))
+                            w_max = int(25 * scale_x)
+                            
+                            if h_tmp >= int(5 * scale_y) and w_min <= w_tmp <= w_max and h_tmp >= (w_tmp * 1.2):
+                                
+                                if bar_ever_found and h_tmp < (prev_white_h - int(80 * scale_y)):
+                                    continue
+
                                 xw, yw, ww, hw = x_tmp, y_tmp, w_tmp, h_tmp
                                 white_h = hw
                                 valid_bar_found = True  
@@ -360,8 +391,6 @@ def run_fishing_bot():
                                 if is_debug_mode:
                                     cv2.rectangle(debug_frame, (xw, yw), (xw+ww, yw+hw), (200, 200, 200), 2)
                                 break 
-                
-                # Instan Win dihapus. Kita menunggu Bar Putih hilang.
                 
                 if valid_bar_found and contours_g:
                     contours_g = sorted(contours_g, key=cv2.contourArea, reverse=True)
@@ -392,11 +421,13 @@ def run_fishing_bot():
                     BAND_HIGH = max(int(10 * scale_y), min(MAX_BAND_HIGH, max_safe_selisih))
                     
                     if white_h < int(30 * scale_y):
-                        current_swing = int(20 * scale_y) 
+                        current_swing = int(50 * scale_y) 
                         BAND_HIGH = max(BAND_HIGH, int(80 * scale_y)) 
                     elif white_h < int(100 * scale_y):
-                        current_swing = int(55 * scale_y) 
+                        current_swing = int(80 * scale_y) 
                         BAND_HIGH = max(BAND_HIGH, int(100 * scale_y))
+                    elif white_h > (SUCCESS_THRESHOLD - int(40 * scale_y)):
+                        current_swing = int(150 * scale_y)
                     else:
                         current_swing = MIN_SWING
 
@@ -416,13 +447,7 @@ def run_fishing_bot():
                     
                     effective_band_high = max(BAND_LOW + int(10 * scale_y), BAND_HIGH - max(0, delta_clamp))
                     effective_band_low  = BAND_LOW + min(0, delta_clamp)
-                 
-
-                    if white_h > int(380 * scale_y):
-                        # MODE FINISH: Jangan berani ayun lebar! 
-                        # Fokus menjaga bar hijau tetap di 390px-400px saja.
-                        effective_band_high = int(5 * scale_y)
-                        effective_band_low = int(-30 * scale_y)
+                         
                     if is_cooling_down:
                         if selisih <= effective_band_low:
                             is_cooling_down = False
@@ -467,15 +492,18 @@ def run_fishing_bot():
                         except: pass
 
                 # =================================================
-                # [DIPERBAIKI] LOGIKA KEMATIAN UI (HISTORICAL TRIGGER)
+                # [DIPERBAIKI] FORCED TENSION (Anti-Halusinasi Transisi)
                 # =================================================
                 if not valid_bar_found:
                     time_lost = time.time() - last_seen_time
+                    time_in_phase3 = time.time() - phase3_start_time
                     
-                    if not bar_ever_found and time_lost < 3.0:
-                        safe_mouse_up()
-                        action_text = "MENUNGGU UI FASE 3 MUNCUL..."
-                        action_color = (255, 255, 0)
+                    # Cek riwayat: Jika max_white_h < 10px, berarti bar putih belum pernah stabil!
+                    # Skrip akan MEMAKSA hold tanpa peduli apa pun selama 3 detik awal!
+                    if time_in_phase3 < 2.0 and max_white_h < int(10 * scale_y):
+                        safe_mouse_down()
+                        action_text = "INITIAL PULL (FORCED TENSION)..."
+                        action_color = (255, 100, 100)
                         
                     elif bar_ever_found and time_lost < 0.6:
                         safe_mouse_up() 
@@ -484,10 +512,8 @@ def run_fishing_bot():
                         action_color = (0, 165, 255)
                         
                     else:
-                        # Bar putih benar-benar lenyap! Ini akhir minigame.
                         safe_mouse_up()
                         
-                        # Cek jejak sejarah: Apakah sebelum lenyap bar putih pernah melampaui Threshold?
                         if max_white_h >= SUCCESS_THRESHOLD: 
                             print(f">>> UI Hilang. Mengonfirmasi: SUKSES (Riwayat Max White: {max_white_h}px | Batas Sukses: >{SUCCESS_THRESHOLD}px)\n")
                             auto_collect_fish(scale_x, scale_y)
@@ -500,11 +526,10 @@ def run_fishing_bot():
                         else:
                             print(f">>> UI Hilang. Mengonfirmasi: GAGAL / PUTUS (Riwayat Max White hanya: {max_white_h}px | Butuh: >{SUCCESS_THRESHOLD}px)\n")
                         
-                        print(">>> Siklus Selesai. Melempar pancingan baru dalam 4 detik...")
-                        time.sleep(4.7)
-                        tap_key_scancode(0x04)
+                        print(f">>> Siklus Selesai. Melempar pancingan baru dalam {CAST_DELAY_SECONDS} detik...")
+                        time.sleep(CAST_DELAY_SECONDS) # [DIPERBAIKI] Menggunakan Cast Delay dari config
+                        tap_key_scancode(0x04) # Menekan angka 3
                         
-                        # Langsung kembali ke Fase 1 (Aman dari jebakan Teks UI)
                         action_text = "AUTO-CASTING..."
                         state = "FASE_1_WAITING" 
                         max_white_h = 0 
