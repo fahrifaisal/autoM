@@ -238,7 +238,8 @@ def run_fishing_bot():
     prev_white_h = 0
     prev_selisih = 0
     delta_selisih = 0
-
+    max_grad_h = 0
+    
     print("========================================")
     print("      FISHING PIXEL BOT (OBFUSCATED)    ")
     print("  Logic: Forced Tension & Cast Delay    ")
@@ -386,6 +387,8 @@ def run_fishing_bot():
                                 valid_bar_found = True  
                                 bar_ever_found = True 
                                 last_seen_time = time.time()
+                                if grad_h > max_grad_h:
+                                    max_grad_h = grad_h
                                 if white_h > max_white_h: 
                                     max_white_h = white_h
                                 if is_debug_mode:
@@ -514,8 +517,12 @@ def run_fishing_bot():
                     else:
                         safe_mouse_up()
                         
+                        # [DIPERBAIKI] Menambahkan log Gradien Bar
+                        print(f">>> UI Hilang.")
+                        print(f"    HASIL: Max White: {max_white_h}px | Max Green: {max_grad_h}px | Target: >{SUCCESS_THRESHOLD}px")
+                        
                         if max_white_h >= SUCCESS_THRESHOLD: 
-                            print(f">>> UI Hilang. Mengonfirmasi: SUKSES (Riwayat Max White: {max_white_h}px | Batas Sukses: >{SUCCESS_THRESHOLD}px)\n")
+                            print(f"    STATUS: SUKSES\n")
                             auto_collect_fish(scale_x, scale_y)
                             
                             if afk_mode_enabled:
@@ -524,15 +531,16 @@ def run_fishing_bot():
                                     perform_afk_routine()
                                     last_afk_time = time.time()
                         else:
-                            print(f">>> UI Hilang. Mengonfirmasi: GAGAL / PUTUS (Riwayat Max White hanya: {max_white_h}px | Butuh: >{SUCCESS_THRESHOLD}px)\n")
-                        
+                            print(f"    STATUS: GAGAL / PUTUS\n")
+                            
                         print(f">>> Siklus Selesai. Melempar pancingan baru dalam {CAST_DELAY_SECONDS} detik...")
                         time.sleep(CAST_DELAY_SECONDS) # [DIPERBAIKI] Menggunakan Cast Delay dari config
                         tap_key_scancode(0x04) # Menekan angka 3
                         
                         action_text = "AUTO-CASTING..."
                         state = "FASE_1_WAITING" 
-                        max_white_h = 0 
+                        max_white_h = 0
+                        max_grad_h = 0
                         fase1_start_time = time.time() 
                         time.sleep(1.0) 
 
