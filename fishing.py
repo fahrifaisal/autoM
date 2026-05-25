@@ -104,7 +104,7 @@ def hold_key_scancode(hexKeyCode, duration):
 
 def tap_key_scancode(hexKeyCode):
     # Durasi tap sedikit diperlama agar game yang sedang memproses animasi tidak melewatkannya
-    hold_key_scancode(hexKeyCode, random.uniform(0.15, 0.25))
+    hold_key_scancode(hexKeyCode, random.uniform(0.15, 0.4))
 
 def is_key_pressed(vk_code):
     return (ctypes.windll.user32.GetAsyncKeyState(vk_code) & 0x8000) != 0
@@ -204,10 +204,10 @@ def run_fishing_bot():
     TIGHT_GRIP_THRESHOLD = int(int(config['ENGINE'].get('TIGHT_GRIP_THRESHOLD', '80')) * scale_y)
     TIGHT_GRIP_SWING = int(int(config['ENGINE'].get('TIGHT_GRIP_SWING', '50')) * scale_y)
 
-    left   = int(400 * scale_x)
-    top    = int(200 * scale_y)
+    left   = int(500 * scale_x)
+    top    = int(150 * scale_y)
     right  = int(1600 * scale_x)
-    bottom = int(1080 * scale_y) 
+    bottom = int(1000 * scale_y) 
     region = (left, top, right, bottom)
     
     camera = dxcam.create(output_color="BGR")
@@ -326,7 +326,7 @@ def run_fishing_bot():
                             action_text = "FASE 2 DETECTED! HOOKING..."
                             single_click()
                             
-                            time.sleep(0.25) 
+                            time.sleep(0.3) 
                             safe_mouse_up() 
                             
                             is_cooling_down = True 
