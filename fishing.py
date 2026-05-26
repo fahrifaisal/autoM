@@ -189,7 +189,7 @@ class FishingBot:
                 'TIGHT_GRIP_SWING': '50',
                 'TIMEOUT_SECONDS': '30', 
                 'AFK_INTERVAL_MINUTES': '40',
-                'CAST_DELAY_SECONDS': '4.8'
+                'CAST_DELAY_SECONDS': '5.0'
             }
             with open(config_file_path, 'w') as configfile:
                 config.write(configfile)
@@ -200,7 +200,7 @@ class FishingBot:
         self.screen_h = int(config['ENGINE'].get('SCREEN_HEIGHT', '1080'))
         self.timeout_sec = int(config['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
         self.afk_interval = float(config['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
-        self.cast_delay = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '4.8'))
+        self.cast_delay = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
         
         self.scale_x = self.screen_w / 1920.0
         self.scale_y = self.screen_h / 1080.0
@@ -271,19 +271,37 @@ class FishingBot:
 
     def perform_afk_routine(self):
         print("\n>>> [AFK ROUTINE] Memulai Anti-AFK & Makan/Minum...")
-        print(">>> Menahan [D] selama 1.5 detik...")
-        self.io.hold_key_scancode(0x20, 1.5)
-        print(">>> Menahan [A] selama 1.5 detik...")
-        self.io.hold_key_scancode(0x1E, 1.5)
-        print(">>> Menahan [W] selama 1.0 detik...")
-        self.io.hold_key_scancode(0x11, 1.0)
-        print(">>> Makan (Tekan 4), jeda 6 detik...")
+        
+        # 1. Ketuk gerakan [D] bergantian dengan jeda mikro
+        print(">>> Mengetuk [D]...")
+        self.io.hold_key_scancode(0x20, 0.25)
+        if self.interruptible_sleep(0.1): return
+        
+        # 2. Ketuk gerakan [A] bergantian dengan jeda mikro
+        print(">>> Mengetuk [A]...")
+        self.io.hold_key_scancode(0x1E, 0.25)
+        if self.interruptible_sleep(0.1): return
+        
+        # 3. Ketuk gerakan [W] bergantian dengan jeda mikro
+        print(">>> Mengetuk [W]...")
+        self.io.hold_key_scancode(0x11, 0.1)
+        if self.interruptible_sleep(0.1): return
+        
+        # 4. Proses Makan (Menggunakan Jeda Pintar yang Bisa Di-cancel)
+        print(">>> Makan (Tekan 4), jeda animasi 7 detik...")
         self.io.tap_key_scancode(0x05)
-        time.sleep(6.0)
-        print(">>> Minum (Tekan 5), jeda 6 detik...")
+        if self.interruptible_sleep(7.0): 
+            print("[🚨] AFK Routine dibatalkan di tengah jalan via Panic Button!")
+            return
+        
+        # 5. Proses Minum (Menggunakan Jeda Pintar yang Bisa Di-cancel)
+        print(">>> Minum (Tekan 5), jeda animasi 7 detik...")
         self.io.tap_key_scancode(0x06)
-        time.sleep(6.0)
-        print(">>> [AFK ROUTINE] Selesai.\n")
+        if self.interruptible_sleep(7.0): 
+            print("[🚨] AFK Routine dibatalkan di tengah jalan via Panic Button!")
+            return
+            
+        print(">>> [AFK ROUTINE] Selesai secara berurutan.\n")
 
     def print_banner(self):
         print("========================================")
@@ -596,6 +614,8 @@ class FishingBot:
                                     print(f"    STATUS: SUKSES\n")
                                     self.perform_auto_collect()
                                     if self.afk_mode_enabled and (time.time() - self.last_afk_time) >= (self.afk_interval * 60):
+                                        if self.interruptible_sleep(self.cast_delay):
+                                            continue
                                         self.perform_afk_routine()
                                         self.last_afk_time = time.time()
                                 else:
