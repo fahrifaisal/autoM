@@ -8,9 +8,9 @@ import random
 import configparser
 import os
 
-# ==========================================
+# ==============================================================================
 # 1. DPI AWARENESS FIX
-# ==========================================
+# ==============================================================================
 if sys.platform == "win32":
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
@@ -20,9 +20,9 @@ if sys.platform == "win32":
         except Exception:
             pass
 
-# ==========================================
-# 2. INPUT CONTROLLER CLASS
-# ==========================================
+# ==============================================================================
+# 2. INPUT CONTROLLER CLASS (Win32 SendInput API - Sinkron Murni)
+# ==============================================================================
 PUL = ctypes.POINTER(ctypes.c_ulong)
 
 class KeyBdInput(ctypes.Structure):
@@ -74,8 +74,9 @@ class InputController:
             ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
             self.mouse_is_pressed = False
 
-    def single_click(self):
-        duration = random.uniform(0.04, 0.07) 
+    def single_click_instant(self):
+        """Klik kilat sinkron murni tanpa antrean event loop untuk Fase 2"""
+        duration = random.uniform(0.02, 0.04) 
         self.safe_mouse_down()
         time.sleep(duration)
         self.safe_mouse_up()
@@ -86,14 +87,28 @@ class InputController:
         ii_down.ki = KeyBdInput(0, hexKeyCode, KEYEVENTF_SCANCODE, 0, ctypes.pointer(extra))
         x_down = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_down)
         ctypes.windll.user32.SendInput(1, ctypes.pointer(x_down), ctypes.sizeof(x_down))
+        
         time.sleep(duration)
+        
         ii_up = Input_I()
         ii_up.ki = KeyBdInput(0, hexKeyCode, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
         x_up = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_up)
         ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), ctypes.sizeof(x_up))
 
     def tap_key_scancode(self, hexKeyCode):
-        self.hold_key_scancode(hexKeyCode, random.uniform(0.15, 0.25))
+        self.hold_key_scancode(hexKeyCode, random.uniform(0.12, 0.18))
+
+    def type_string(self, text: str):
+        """Mengetik teks secara berurutan langsung ke konsol game."""
+        scancodes = {
+            'f': 0x21, 'i': 0x17, 'x': 0x2D, 'u': 0x16,
+            'r': 0x13, 'e': 0x12, 'l': 0x26, 'o': 0x18, 'a': 0x1E, 'd': 0x20,
+            's': 0x1F, 'k': 0x25, 'n': 0x31
+        }
+        for char in text.lower():
+            if char in scancodes:
+                self.tap_key_scancode(scancodes[char])
+                time.sleep(random.uniform(0.03, 0.06))
 
     def is_key_pressed(self, vk_code):
         return (ctypes.windll.user32.GetAsyncKeyState(vk_code) & 0x8000) != 0
@@ -105,7 +120,7 @@ class InputController:
         ctypes.windll.user32.GetCursorPos(ctypes.pointer(pt))
         return pt.x, pt.y
 
-    def smooth_move_mouse(self, target_x, target_y, steps=20, duration=0.25):
+    def smooth_move_mouse(self, target_x, target_y, steps=20, duration=0.20):
         start_x, start_y = self.get_cursor_pos()
         dx = target_x - start_x
         dy = target_y - start_y
@@ -117,9 +132,9 @@ class InputController:
             time.sleep(sleep_time)
 
 
-# ==========================================
-# 3. FISHING BOT CLASS
-# ==========================================
+# ==============================================================================
+# 3. FISHING BOT CLASS (Main Engine - Sinkron Murni)
+# ==============================================================================
 class FishingBot:
     def __init__(self):
         self.io = InputController()
@@ -147,6 +162,9 @@ class FishingBot:
         self.last_afk_time = time.time()
         self.fase1_start_time = 0
         
+        self.timeout_strike_counter = 0
+        self.MAX_TIMEOUT_STRIKES = 2 
+
         self.reset_minigame_state()
 
     def load_config(self):
@@ -162,14 +180,14 @@ class FishingBot:
             config['ENGINE'] = {
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
-                'ABSOLUTE_MAX_GREEN': '360',  
-                'SUCCESS_THRESHOLD': '340',   
+                'ABSOLUTE_MAX_GREEN': '365',  
+                'SUCCESS_THRESHOLD': '380',   
                 'SAFETY_BUFFER': '15',
                 'MAX_BAND_HIGH': '100',
                 'MIN_SWING': '120',
                 'TIGHT_GRIP_THRESHOLD': '80',
                 'TIGHT_GRIP_SWING': '50',
-                'TIMEOUT_SECONDS': '60',
+                'TIMEOUT_SECONDS': '30', 
                 'AFK_INTERVAL_MINUTES': '40',
                 'CAST_DELAY_SECONDS': '4.8'
             }
@@ -180,15 +198,15 @@ class FishingBot:
         
         self.screen_w = int(config['ENGINE'].get('SCREEN_WIDTH', '1920'))
         self.screen_h = int(config['ENGINE'].get('SCREEN_HEIGHT', '1080'))
-        self.timeout_sec = int(config['ENGINE'].get('TIMEOUT_SECONDS', '60'))
+        self.timeout_sec = int(config['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
         self.afk_interval = float(config['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
-        self.cast_delay = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '6.0'))
+        self.cast_delay = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '4.8'))
         
         self.scale_x = self.screen_w / 1920.0
         self.scale_y = self.screen_h / 1080.0
 
-        self.MAX_GREEN = int(int(config['ENGINE'].get('ABSOLUTE_MAX_GREEN', '360')) * self.scale_y)
-        self.SUCCESS_THRESHOLD = int(int(config['ENGINE'].get('SUCCESS_THRESHOLD', '340')) * self.scale_y)
+        self.MAX_GREEN = int(int(config['ENGINE'].get('ABSOLUTE_MAX_GREEN', '365')) * self.scale_y)
+        self.SUCCESS_THRESHOLD = int(int(config['ENGINE'].get('SUCCESS_THRESHOLD', '380')) * self.scale_y)
         self.SAFETY_BUFFER = int(int(config['ENGINE'].get('SAFETY_BUFFER', '15')) * self.scale_y)
         self.MIN_SWING = int(int(config['ENGINE'].get('MIN_SWING', '120')) * self.scale_y)
         self.MAX_BAND_HIGH = int(int(config['ENGINE'].get('MAX_BAND_HIGH', '100')) * self.scale_y)
@@ -209,24 +227,54 @@ class FishingBot:
         self.in_rescue_mode = False
         self.hold_stall_counter = 0
 
+    def interruptible_sleep(self, total_duration):
+        """
+        [BARU & SANGAT PENTING]
+        Menggantikan time.sleep() makro agar Panic Button [X] tetap terdeteksi instan.
+        Memecah durasi panjang menjadi irisan 0.05 detik yang mengecek tombol keyboard.
+        Menghasilkan True jika diinterupsi oleh Panic Button X, False jika selesai normal.
+        """
+        start_sleep = time.time()
+        while time.time() - start_sleep < total_duration:
+            if self.io.is_key_pressed(0x58): # Tombol 'X' ditekan saat jeda tunggu
+                return True
+            time.sleep(0.05)
+        return False
+
+    def execute_fixui_recovery(self):
+        print(f"\n[⚠️] DETEKSI ERROR: Timeout berturut-turut sebanyak {self.timeout_strike_counter}x!")
+        print("[🔧] Memulai Proses Pembersihan UI via Konsol F8...")
+        
+        self.io.tap_key_scancode(0x42) # Scancode F8
+        time.sleep(0.4)
+        
+        self.io.type_string("fixui")
+        self.io.tap_key_scancode(0x1C) # Enter
+        time.sleep(0.4)
+        
+        self.io.tap_key_scancode(0x42) # Scancode F8
+        print("[✅] UI Sukses Di-refresh! Mengembalikan siklus mancing harian...\n")
+        time.sleep(1.0)
+        self.timeout_strike_counter = 0
+
     def perform_auto_collect(self):
         print("\n>>> TARGET TERCAPAI! Mengeksekusi Auto-Collect...")
-        time.sleep(0.8) 
+        time.sleep(0.3) 
         base_x = random.randint(800, 850)
         base_y = random.randint(920, 940)
         collect_x = int(base_x * self.scale_x)
         collect_y = int(base_y * self.scale_y)
         self.io.smooth_move_mouse(collect_x, collect_y)
         time.sleep(random.uniform(0.1, 0.2)) 
-        self.io.single_click()
+        self.io.single_click_instant()
         print(f">>> Auto-Collect Selesai di (X:{collect_x}, Y:{collect_y}).\n")
 
     def perform_afk_routine(self):
         print("\n>>> [AFK ROUTINE] Memulai Anti-AFK & Makan/Minum...")
-        print(">>> Menahan [D] selama 2 detik...")
-        self.io.hold_key_scancode(0x20, 2.0)
-        print(">>> Menahan [A] selama 2 detik...")
-        self.io.hold_key_scancode(0x1E, 2.0)
+        print(">>> Menahan [D] selama 1.5 detik...")
+        self.io.hold_key_scancode(0x20, 1.5)
+        print(">>> Menahan [A] selama 1.5 detik...")
+        self.io.hold_key_scancode(0x1E, 1.5)
         print(">>> Menahan [W] selama 1.0 detik...")
         self.io.hold_key_scancode(0x11, 1.0)
         print(">>> Makan (Tekan 4), jeda 6 detik...")
@@ -239,27 +287,30 @@ class FishingBot:
 
     def print_banner(self):
         print("========================================")
-        print("      FISHING PIXEL BOT (PRODUCTION)    ")
-        print("  Logic: Anti-Spam Rhythm Core V3.1     ")
+        print("      FISHING PIXEL BOT                 ")
         print("========================================")
         print(f"[CONFIG] Monitor : {self.screen_w}x{self.screen_h} (DPI Fixed)")
         print(f"[CONFIG] Max Grn : {self.MAX_GREEN} | Sukses: >{self.SUCCESS_THRESHOLD}")
+        print(f"[CONFIG] Timeout : {self.timeout_sec} Detik (Strike: {self.MAX_TIMEOUT_STRIKES}x)")
         print(f"[CONFIG] Cast Dly: {self.cast_delay} Detik")
         print("========================================")
         print("[8] - Toggle Live Debug View")
         print("[9] - Exit Program")
         print("[7] - TOGGLE AUTO-EAT/AFK MODE")
         print("[3] - MANUALLY START FISHING")
-        print("[X] - PANIC BUTTON (Reset to Standby)")
+        print("[X] - PANIC BUTTON (Instant Interrupt)")
         print("========================================")
 
     def run(self):
         self.print_banner()
         try:
             while True:
-                if self.io.is_key_pressed(0x39): break 
+                # --------------------------------------------------------------
+                # KEYBOARD INTERRUPT MONITORING (100% KILAT SINKRON)
+                # --------------------------------------------------------------
+                if self.io.is_key_pressed(0x39): break # Tombol '9' Exit
                 
-                if self.io.is_key_pressed(0x38): 
+                if self.io.is_key_pressed(0x38): # Tombol '8' Debug
                     if not self.debug_key_pressed:
                         self.is_debug_mode = not self.is_debug_mode
                         if not self.is_debug_mode: cv2.destroyWindow("Live Debug")
@@ -267,7 +318,7 @@ class FishingBot:
                 else:
                     self.debug_key_pressed = False
 
-                if self.io.is_key_pressed(0x37): 
+                if self.io.is_key_pressed(0x37): # Tombol '7' AFK Mode
                     if not self.afk_key_pressed:
                         self.afk_mode_enabled = not self.afk_mode_enabled
                         status = "ON" if self.afk_mode_enabled else "OFF"
@@ -276,9 +327,10 @@ class FishingBot:
                 else:
                     self.afk_key_pressed = False
 
+                # [PANIC BUTTON X] - Respon instan di loop utama
                 if self.io.is_key_pressed(0x58): 
                     if self.state != "FASE_0_STANDBY":
-                        print("\n[!] INTERRUPT! Kembali ke Standby...")
+                        print("\n[🚨] PANIC INTERRUPT! Kembali ke Standby...")
                         self.io.safe_mouse_up() 
                         self.state = "FASE_0_STANDBY"
                         self.reset_minigame_state()
@@ -292,6 +344,9 @@ class FishingBot:
                 action_color = (255, 255, 255)
 
                 try:
+                    # --------------------------------------------------------------
+                    # STATE MACHINE OPERASIONAL BOT
+                    # --------------------------------------------------------------
                     if self.state == "FASE_0_STANDBY":
                         action_text = "STANDBY: Tekan '3' untuk mulai..."
                         action_color = (0, 255, 255) 
@@ -303,8 +358,13 @@ class FishingBot:
 
                     elif self.state == "FASE_1_WAITING":
                         if time.time() - self.fase1_start_time > self.timeout_sec: 
-                            print(f"\n[!] TIMEOUT: Tidak ada ikan setelah {self.timeout_sec} detik.")
-                            self.io.tap_key_scancode(0x04)
+                            print(f"\n[!] TIMEOUT: Tidak ada respons ikan dalam {self.timeout_sec} detik.")
+                            self.timeout_strike_counter += 1 
+                            
+                            if self.timeout_strike_counter >= self.MAX_TIMEOUT_STRIKES:
+                                self.execute_fixui_recovery()
+                            
+                            self.io.tap_key_scancode(0x04) # Ketuk tombol '3'
                             self.fase1_start_time = time.time() 
                             time.sleep(1.0) 
                             continue 
@@ -322,10 +382,13 @@ class FishingBot:
                                 
                                 if (min_h <= h <= max_h) and w > min_w and w > (h * 4):
                                     action_text = "FASE 2 DETECTED! HOOKING..."
-                                    self.io.single_click()
-                                    time.sleep(0.3) 
+                                    
+                                    # KEMBALI KILAT SINKRON: Deteksi umpan langsung memukul instan tanpa antrean
+                                    self.io.single_click_instant()
+                                    time.sleep(0.2) 
                                     self.io.safe_mouse_up() 
                                     
+                                    self.timeout_strike_counter = 0
                                     self.reset_minigame_state()
                                     self.state = "FASE_3_MINIGAME"
                                     self.phase3_start_time = time.time() 
@@ -334,7 +397,7 @@ class FishingBot:
                                     action_text = f"NOISE REJ (W:{w} H:{h})"
 
                     elif self.state == "FASE_3_MINIGAME":
-                        if time.time() - self.phase3_start_time > 240:
+                        if time.time() - self.phase3_start_time > 480:
                             self.io.safe_mouse_up()
                             print("\n[!] MINIGAME TIMEOUT (Terlalu Lama). Memutus paksa...")
                             self.state = "FASE_1_WAITING"
@@ -354,7 +417,7 @@ class FishingBot:
                         white_rescue_mode = False
                         xw, yw, ww, hw = 0, 0, 0, 0
 
-                        # DETEKSI GEOMETRI KETAT BAR PUTIH
+                        # --- DETEKSI GEOMETRI KETAT BAR PUTIH ---
                         if contours_w:
                             contours_w = sorted(contours_w, key=cv2.contourArea, reverse=True)
                             for cw in contours_w:
@@ -380,7 +443,7 @@ class FishingBot:
                                             cv2.rectangle(debug_frame, (xw, yw), (xw+ww, yw+hw), (200, 200, 200), 2)
                                         break 
 
-                        # DETEKSI BAR HIJAU
+                        # --- DETEKSI BAR HIJAU ---
                         if valid_bar_found and contours_g:
                             contours_g = sorted(contours_g, key=cv2.contourArea, reverse=True)
                             for cg in contours_g:
@@ -397,13 +460,13 @@ class FishingBot:
                                             cv2.rectangle(debug_frame, (xg, yg), (xg+wg, yg+hg), (100, 255, 100), 2)
                                         break
 
-                        # =================================================
-                        # CORE ENGINE MATEMATIKA (DENGAN RITME TEMPO)
-                        # =================================================
+                        # --------------------------------------------------------------
+                        # CORE ENGINE MATEMATIKA (KONFIGURASI TUNING EMAS 170PX ANDA)
+                        # --------------------------------------------------------------
                         if valid_bar_found:
                             selisih = grad_h - white_h
                             self.delta_selisih = selisih - self.prev_selisih
-                            delta_white = white_h - self.prev_white_h # [BARU] Kecepatan Bar Putih
+                            delta_white = white_h - self.prev_white_h 
 
                             self.prev_grad_h = grad_h
                             self.prev_white_h = white_h
@@ -412,7 +475,6 @@ class FishingBot:
                             max_safe_selisih = self.MAX_GREEN - white_h - self.SAFETY_BUFFER
                             BAND_HIGH = max(int(10 * self.scale_y), min(self.MAX_BAND_HIGH, max_safe_selisih))
                             
-                            # Mengatur ayunan sesuai fase minigame
                             if white_h < int(30 * self.scale_y):
                                 current_swing = int(50 * self.scale_y) 
                                 BAND_HIGH = max(BAND_HIGH, int(80 * self.scale_y)) 
@@ -420,7 +482,7 @@ class FishingBot:
                                 current_swing = int(80 * self.scale_y) 
                                 BAND_HIGH = max(BAND_HIGH, int(100 * self.scale_y))
                             elif white_h > (self.SUCCESS_THRESHOLD - int(40 * self.scale_y)):
-                                current_swing = int(150 * self.scale_y)
+                                current_swing = int(170 * self.scale_y) # Tuning 170px Anda
                             else:
                                 current_swing = self.MIN_SWING
 
@@ -429,10 +491,8 @@ class FishingBot:
 
                             BAND_LOW = BAND_HIGH - current_swing
                             
-                            # [DIPERBAIKI] Di fase akhir, cap BAND_LOW di -80px agar tempo tarikan
-                            # jauh lebih santai (tidak spam/kedekatan).
                             if white_h > (self.SUCCESS_THRESHOLD - int(40 * self.scale_y)):
-                                BAND_LOW = max(BAND_LOW, -int(80 * self.scale_y))
+                                BAND_LOW = max(BAND_LOW, -int(170 * self.scale_y)) # Lantai 170px dibuka lebar
                             else:
                                 BAND_LOW = max(BAND_LOW, -int(60 * self.scale_y))
 
@@ -444,7 +504,6 @@ class FishingBot:
                             BAND_LOW  = int(BAND_LOW  * random.uniform(0.98, 1.02))
 
                             delta_clamp = max(int(-15 * self.scale_y), min(int(15 * self.scale_y), self.delta_selisih))
-                            
                             effective_band_high = max(BAND_LOW + int(10 * self.scale_y), BAND_HIGH - max(0, delta_clamp))
                             effective_band_low  = BAND_LOW + min(0, delta_clamp)
                                  
@@ -462,9 +521,9 @@ class FishingBot:
                                     white_rescue_mode = True
                                     self.hold_stall_counter = 0
 
-                            # [DIPERBAIKI] Jarak Exit Rescue dilebarkan ke 45px agar ritme pengereman stabil
+                            # Rescue Atas
                             GREEN_RESCUE_ENTER = self.MAX_GREEN - int(5  * self.scale_y)
-                            GREEN_RESCUE_EXIT  = self.MAX_GREEN - int(45 * self.scale_y)
+                            GREEN_RESCUE_EXIT  = self.MAX_GREEN - int(135 * self.scale_y) # Jeda keluar 135px Anda
                             
                             if grad_h >= GREEN_RESCUE_ENTER:
                                 self.in_rescue_mode = True
@@ -477,11 +536,9 @@ class FishingBot:
                                 white_rescue_mode = False
                                 self.hold_stall_counter = 0
 
-                            # [DIPERBAIKI] SMART STALL DETECTION
-                            # Tidak akan memaksa release jika bar putih sedang bergerak maju!
+                            # Smart Stall Detection
                             STALL_FRAMES = 12
                             if not self.is_cooling_down and not white_rescue_mode:
-                                # Skrip hanya dianggap "Macet" jika selisih stagnan DAN bar putih juga stagnan
                                 if self.delta_selisih <= 1 and delta_white <= 1:
                                     self.hold_stall_counter += 1
                                 else:
@@ -493,7 +550,7 @@ class FishingBot:
                             else:
                                 self.hold_stall_counter = 0
 
-                            # Eksekusi Klik
+                            # Sinyal Klik Per-Frame
                             if self.is_cooling_down:
                                 self.io.safe_mouse_up()
                                 if rescue_mode:
@@ -518,6 +575,7 @@ class FishingBot:
                                     cv2.line(debug_frame, (xw-15, y_band_high), (xw+30, y_band_high), (0, 0, 255), 2)
                                 except: pass
 
+                        # --- LOGIKA DEKLARASI SIKLUS BERAKHIR ---
                         if not valid_bar_found:
                             time_lost = time.time() - self.last_seen_time
                             time_in_phase3 = time.time() - self.phase3_start_time
@@ -544,19 +602,26 @@ class FishingBot:
                                     print(f"    STATUS: GAGAL / PUTUS\n")
                                     
                                 print(f">>> Siklus Selesai. Melempar pancingan baru dalam {self.cast_delay} detik...")
-                                time.sleep(self.cast_delay) 
-                                self.io.tap_key_scancode(0x04) 
+                                
+                                # Menggunakan Micro-Sleep Loop untuk cast_delay: Panic Button X tetap aktif
+                                if self.interruptible_sleep(self.cast_delay):
+                                    continue # Jika mendeteksi 'X', langsung potong siklus ke standby
+                                    
+                                self.io.tap_key_scancode(0x04) # Ketuk tombol '3'
                                 
                                 action_text = "AUTO-CASTING..."
                                 self.state = "FASE_1_WAITING" 
                                 self.reset_minigame_state()
                                 self.fase1_start_time = time.time() 
-                                time.sleep(1.0) 
-
+                                
+                                if self.interruptible_sleep(1.0):
+                                    continue
+                                    
                 except Exception as inner_e:
                     print(f"Frame Processing Exception: {inner_e}")
                     pass
 
+                # Rendering Antarmuka Live Debug
                 if self.is_debug_mode and debug_frame is not None:
                     cv2.putText(debug_frame, f"State: {self.state}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
                     cv2.putText(debug_frame, f"Action: {action_text}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, action_color, 2)
@@ -571,13 +636,14 @@ class FishingBot:
                     break
 
         except KeyboardInterrupt:
-            print("\n[!] Dihentikan oleh user (KeyboardInterrupt).")
+            print("\n[!] Dihentikan secara paksa oleh user (Ctrl + C). Membersihkan resource...")
         except Exception as e:
             print(f"\n[!] Fatal Error: {e}")
         finally:
             self.io.safe_mouse_up()
             self.camera.stop()
             cv2.destroyAllWindows()
+            os._exit(0)
 
 if __name__ == "__main__":
     bot = FishingBot()
