@@ -275,11 +275,11 @@ class FishingBot:
         print("\n>>> [AFK ROUTINE] Memulai Anti-AFK & Makan/Minum...")
         
         print(">>> Mengetuk [D]...")
-        self.io.hold_key_scancode(0x20, 0.2)
+        self.io.hold_key_scancode(0x20, 0.3)
         if self.interruptible_sleep(0.05): return
         
         print(">>> Mengetuk [A]...")
-        self.io.hold_key_scancode(0x1E, 0.3)
+        self.io.hold_key_scancode(0x1E, 0.35)
         if self.interruptible_sleep(0.05): return
         
         print(">>> Mengetuk [W]...")
