@@ -75,7 +75,6 @@ class InputController:
             self.mouse_is_pressed = False
 
     def single_click_instant(self):
-        """Klik kilat sinkron murni tanpa antrean event loop untuk Fase 2"""
         duration = random.uniform(0.02, 0.04) 
         self.safe_mouse_down()
         time.sleep(duration)
@@ -99,7 +98,6 @@ class InputController:
         self.hold_key_scancode(hexKeyCode, random.uniform(0.12, 0.18))
 
     def type_string(self, text: str):
-        """Mengetik teks secara berurutan langsung ke konsol game."""
         scancodes = {
             'f': 0x21, 'i': 0x17, 'x': 0x2D, 'u': 0x16,
             'r': 0x13, 'e': 0x12, 'l': 0x26, 'o': 0x18, 'a': 0x1E, 'd': 0x20,
@@ -162,8 +160,10 @@ class FishingBot:
         self.last_afk_time = time.time()
         self.fase1_start_time = 0
         
+        # Variabel Pelacak Error Siklus / Timeout
         self.timeout_strike_counter = 0
         self.MAX_TIMEOUT_STRIKES = 2 
+        self.recovery_strike_counter = 0 # Pelacak beruntun kegagalan fixui
 
         self.reset_minigame_state()
 
@@ -180,16 +180,16 @@ class FishingBot:
             config['ENGINE'] = {
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
-                'ABSOLUTE_MAX_GREEN': '360',  # [DIKEMBALIKAN] Default aman dari modifikasi user
-                'SUCCESS_THRESHOLD': '390',   # [DIPERBAIKI] Sesuai instruksi: Default sukses ke 390
+                'ABSOLUTE_MAX_GREEN': '360',  # Jaga batas zona aman Anda
+                'SUCCESS_THRESHOLD': '390',   # Sesuai instruksi: Default ke 390
                 'SAFETY_BUFFER': '15',
                 'MAX_BAND_HIGH': '100',
                 'MIN_SWING': '120',
                 'TIGHT_GRIP_THRESHOLD': '80',
                 'TIGHT_GRIP_SWING': '50',
-                'TIMEOUT_SECONDS': '30',      # [DIPERBAIKI] Sesuai instruksi: Default timeout ke 30 detik
+                'TIMEOUT_SECONDS': '30',      # Sesuai instruksi: Batas timeout 30 detik
                 'AFK_INTERVAL_MINUTES': '40',
-                'CAST_DELAY_SECONDS': '4.8'
+                'CAST_DELAY_SECONDS': '5.0'   # Sesuai log: Delay 5.0 detik
             }
             with open(config_file_path, 'w') as configfile:
                 config.write(configfile)
@@ -200,7 +200,7 @@ class FishingBot:
         self.screen_h = int(config['ENGINE'].get('SCREEN_HEIGHT', '1080'))
         self.timeout_sec = int(config['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
         self.afk_interval = float(config['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
-        self.cast_delay = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '4.8'))
+        self.cast_delay = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
         
         self.scale_x = self.screen_w / 1920.0
         self.scale_y = self.screen_h / 1080.0
@@ -228,36 +228,30 @@ class FishingBot:
         self.hold_stall_counter = 0
 
     def interruptible_sleep(self, total_duration):
-        """
-        Menggantikan time.sleep() makro agar Panic Button [X] tetap terdeteksi instan.
-        Memecah durasi panjang menjadi irisan 0.05 detik yang mengecek tombol keyboard.
-        Menghasilkan True jika diinterupsi oleh Panic Button X, False jika selesai normal.
-        """
         start_sleep = time.time()
         while time.time() - start_sleep < total_duration:
-            if self.io.is_key_pressed(0x58): # Tombol 'X' ditekan saat jeda tunggu
+            if self.io.is_key_pressed(0x58): # Tombol 'X' Panic
                 return True
             time.sleep(0.05)
         return False
 
     def execute_fixui_recovery(self):
-        """Protokol Pembersihan UI Macet via Konsol F8"""
-        print(f"\n[⚠️] DETEKSI ERROR: Timeout berturut-turut sebanyak {self.timeout_strike_counter}x!")
+        print(f"\n[⚠️] DETEKSI TIMEOUT: Tidak ada respons minigame sebanyak {self.timeout_strike_counter}x berturut-turut!")
         print("[🔧] Memulai Proses Pembersihan UI via Konsol F8...")
         
-        self.io.tap_key_scancode(0x42) # Scancode F8
+        self.io.tap_key_scancode(0x42) # Buka Konsol F8
         time.sleep(0.4)
         
-        self.io.type_string("fixui")
-        self.io.tap_key_scancode(0x1C) # Enter
-        time.sleep(0.4)
+        self.io.type_string("fixui")   # Hanya mengetik fixui (reloadskin dihapus)
+        self.io.tap_key_scancode(0x1C) # Tekan Enter
+        time.sleep(0.5)
         
-        # [DIPERBAIKI] Sesuai instruksi: Perintah reloadskin resmi dieliminasi dari fungsi
-        
-        self.io.tap_key_scancode(0x42) # Scancode F8
-        print("[✅] Perintah Pembersihan Dikirim! Memaksa sistem kembali ke Standby demi keamanan...\n")
+        self.io.tap_key_scancode(0x42) # Tutup Konsol F8
+        print("[✅] Perintah 'fixui' sukses dikirim. Melanjutkan loop...\n")
         time.sleep(1.0)
+        
         self.timeout_strike_counter = 0
+        self.recovery_strike_counter += 1 # Catat keberhasilan eksekusi recovery
 
     def perform_auto_collect(self):
         print("\n>>> TARGET TERCAPAI! Mengeksekusi Auto-Collect...")
@@ -288,26 +282,22 @@ class FishingBot:
         
         print(">>> Makan (Tekan 4), jeda animasi 7 detik...")
         self.io.tap_key_scancode(0x05)
-        if self.interruptible_sleep(7.0): 
-            print("[🚨] AFK Routine dibatalkan di tengah jalan via Panic Button!")
-            return
+        if self.interruptible_sleep(7.0): return
         
         print(">>> Minum (Tekan 5), jeda animasi 7 detik...")
         self.io.tap_key_scancode(0x06)
-        if self.interruptible_sleep(7.0): 
-            print("[🚨] AFK Routine dibatalkan di tengah jalan via Panic Button!")
-            return
+        if self.interruptible_sleep(7.0): return
             
         print(">>> [AFK ROUTINE] Selesai secara berurutan.\n")
 
     def print_banner(self):
         print("========================================")
         print("      FISHING PIXEL BOT (PRODUCTION)    ")
-        print("  Logic: Direct Sync Core & Micro-Sleep ")
+        print("  Logic: Core 170px Gold Standard V3.8  ")
         print("========================================")
         print(f"[CONFIG] Monitor : {self.screen_w}x{self.screen_h} (DPI Fixed)")
         print(f"[CONFIG] Max Grn : {self.MAX_GREEN} | Sukses: >{self.SUCCESS_THRESHOLD}")
-        print(f"[CONFIG] Timeout : {self.timeout_sec} Detik (Strike: {self.MAX_TIMEOUT_STRIKES}x)")
+        print(f"[CONFIG] Timeout : {self.timeout_sec} Detik (Recovery Limit: 2x)")
         print(f"[CONFIG] Cast Dly: {self.cast_delay} Detik")
         print("========================================")
         print("[8] - Toggle Live Debug View")
@@ -322,7 +312,7 @@ class FishingBot:
         try:
             while True:
                 # --------------------------------------------------------------
-                # KEYBOARD INTERRUPT MONITORING (100% KILAT SINKRON)
+                # KEYBOARD INTERRUPT MONITORING
                 # --------------------------------------------------------------
                 if self.io.is_key_pressed(0x39): break # Tombol '9' Exit
                 
@@ -343,13 +333,15 @@ class FishingBot:
                 else:
                     self.afk_key_pressed = False
 
-                # [PANIC BUTTON X] - Respon instan di loop utama
+                # Panic Button [X] manual
                 if self.io.is_key_pressed(0x58): 
                     if self.state != "FASE_0_STANDBY":
                         print("\n[🚨] PANIC INTERRUPT! Kembali ke Standby...")
                         self.io.safe_mouse_up() 
                         self.state = "FASE_0_STANDBY"
                         self.reset_minigame_state()
+                        self.recovery_strike_counter = 0
+                        self.timeout_strike_counter = 0
                         time.sleep(0.5) 
                         continue 
 
@@ -370,21 +362,29 @@ class FishingBot:
                             print("\n>>> Memulai siklus pemantauan...")
                             self.state = "FASE_1_WAITING"
                             self.fase1_start_time = time.time() 
+                            self.recovery_strike_counter = 0
+                            self.timeout_strike_counter = 0
                             time.sleep(1.0) 
 
                     elif self.state == "FASE_1_WAITING":
                         if time.time() - self.fase1_start_time > self.timeout_sec: 
-                            print(f"\n[!] TIMEOUT: Tidak ada respons ikan dalam {self.timeout_sec} detik.")
                             self.timeout_strike_counter += 1 
                             
+                            # Jalankan fixui jika terdeteksi no-ui sebanyak 2 kali berturut-turut
                             if self.timeout_strike_counter >= self.MAX_TIMEOUT_STRIKES:
                                 self.execute_fixui_recovery()
-                                # [DIPERBAIKI] Sesuai instruksi: Langsung paksa kembali ke Standby alih-alih melempar kail lagi
-                                self.state = "FASE_0_STANDBY"
-                                self.reset_minigame_state()
-                                continue
+                                
+                                # [FITUR BARU] Jika fixui sudah dilakukan 2x berturut-turut namun tetap error, force masuk standby
+                                if self.recovery_strike_counter >= 2:
+                                    print("\n[🚨] KONDISI KRITIS: FixUI dilakukan 2x namun UI tetap macet!")
+                                    print("[🔒] Menghentikan bot dan memaksa masuk MODE STANDBY demi keamanan...\n")
+                                    self.io.safe_mouse_up()
+                                    self.state = "FASE_0_STANDBY"
+                                    self.reset_minigame_state()
+                                    time.sleep(1.0)
+                                    continue
                             
-                            self.io.tap_key_scancode(0x04) # Ketuk tombol '3'
+                            self.io.tap_key_scancode(0x04) # Ketuk tombol '3' untuk melempar ulang
                             self.fase1_start_time = time.time() 
                             time.sleep(1.0) 
                             continue 
@@ -407,7 +407,10 @@ class FishingBot:
                                     time.sleep(0.2) 
                                     self.io.safe_mouse_up() 
                                     
+                                    # Minigame berhasil ditemukan, reset seluruh counter pelacak error
                                     self.timeout_strike_counter = 0
+                                    self.recovery_strike_counter = 0
+                                    
                                     self.reset_minigame_state()
                                     self.state = "FASE_3_MINIGAME"
                                     self.phase3_start_time = time.time() 
@@ -479,9 +482,7 @@ class FishingBot:
                                             cv2.rectangle(debug_frame, (xg, yg), (xg+wg, yg+hg), (100, 255, 100), 2)
                                         break
 
-                        # --------------------------------------------------------------
-                        # CORE ENGINE MATEMATIKA (KONFIGURASI TUNING EMAS 170PX ANDA)
-                        # --------------------------------------------------------------
+                        # --- CORE ENGINE MATEMATIKA ---
                         if valid_bar_found:
                             selisih = grad_h - white_h
                             self.delta_selisih = selisih - self.prev_selisih
@@ -501,7 +502,7 @@ class FishingBot:
                                 current_swing = int(80 * self.scale_y) 
                                 BAND_HIGH = max(BAND_HIGH, int(100 * self.scale_y))
                             elif white_h > (self.SUCCESS_THRESHOLD - int(40 * self.scale_y)):
-                                current_swing = int(170 * self.scale_y) # Jarak berayun emas 170px Anda
+                                current_swing = int(170 * self.scale_y) # Pegas tarikan 170px emas Anda
                             else:
                                 current_swing = self.MIN_SWING
 
@@ -511,7 +512,7 @@ class FishingBot:
                             BAND_LOW = BAND_HIGH - current_swing
                             
                             if white_h > (self.SUCCESS_THRESHOLD - int(40 * self.scale_y)):
-                                BAND_LOW = max(BAND_LOW, -int(170 * self.scale_y)) # Lantai ayun bawah dibuka penuh 170px
+                                BAND_LOW = max(BAND_LOW, -int(170 * self.scale_y)) # Ruang meluncur luas
                             else:
                                 BAND_LOW = max(BAND_LOW, -int(60 * self.scale_y))
 
@@ -540,9 +541,9 @@ class FishingBot:
                                     white_rescue_mode = True
                                     self.hold_stall_counter = 0
 
-                            # Rescue Atas (Pengereman Darurat Konstan)
+                            # Rescue Atas (Pengereman Darurat Konfigurasi Emas Anda)
                             GREEN_RESCUE_ENTER = self.MAX_GREEN - int(5  * self.scale_y)
-                            GREEN_RESCUE_EXIT  = self.MAX_GREEN - int(135 * self.scale_y) # Jeda rilis 135px Anda
+                            GREEN_RESCUE_EXIT  = self.MAX_GREEN - int(135 * self.scale_y) # Jeda meluncur 135px
                             
                             if grad_h >= GREEN_RESCUE_ENTER:
                                 self.in_rescue_mode = True
@@ -569,7 +570,6 @@ class FishingBot:
                             else:
                                 self.hold_stall_counter = 0
 
-                            # Sinyal Klik Per-Frame
                             if self.is_cooling_down:
                                 self.io.safe_mouse_up()
                                 if rescue_mode:
@@ -615,6 +615,7 @@ class FishingBot:
                                     print(f"    STATUS: SUKSES\n")
                                     self.perform_auto_collect()
                                     
+                                    # Pengecekan AFK Rutin pasca Auto-Collect
                                     if self.afk_mode_enabled and (time.time() - self.last_afk_time) >= (self.afk_interval * 60):
                                         print(f">>> Memberikan jeda aman sebelum rutinitas AFK...")
                                         if self.interruptible_sleep(self.cast_delay):
