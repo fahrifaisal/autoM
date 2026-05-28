@@ -364,28 +364,73 @@ class FishingBot:
                             time.sleep(1.0) 
 
                     elif self.state == "FASE_1_WAITING":
+                        # ------------------------------------------------------
+                        # LOGIKA EVALUASI TIMEOUT BERLAPIS (KOREKSI TOTAL)
+                        # ------------------------------------------------------
                         if time.time() - self.fase1_start_time > self.timeout_sec: 
                             self.timeout_strike_counter += 1 
+                            print(f"\n[⚠️] TIMEOUT Terdeteksi! Beruntun ke-{self.timeout_strike_counter}")
                             
-                            # Jalankan fixui jika terdeteksi no-ui sebanyak 2 kali berturut-turut
-                            if self.timeout_strike_counter >= self.MAX_TIMEOUT_STRIKES:
-                                self.execute_fixui_recovery()
+                            # --- TIMEOUT 1: Lempar pancingan biasa lagi ---
+                            if self.timeout_strike_counter == 1:
+                                print("    -> Aksi: Mencoba tekan '3' untuk melempar ulang biasa...")
+                                self.io.tap_key_scancode(0x04) # Tekan 3
+                                self.fase1_start_time = time.time()
+                                time.sleep(1.5)
+                                continue
                                 
-                                # [FITUR BARU] Jika fixui sudah dilakukan 2x berturut-turut namun tetap error, force masuk standby
-                                if self.recovery_strike_counter >= 2:
-                                    print("\n[🚨] KONDISI KRITIS: FixUI dilakukan 2x namun UI tetap macet!")
-                                    print("[🔒] Menghentikan bot dan memaksa masuk MODE STANDBY demi keamanan...\n")
-                                    self.io.safe_mouse_up()
-                                    self.state = "FASE_0_STANDBY"
-                                    self.reset_minigame_state()
-                                    time.sleep(1.0)
-                                    continue
-                            
-                            self.io.tap_key_scancode(0x04) # Ketuk tombol '3' untuk melempar ulang
-                            self.fase1_start_time = time.time() 
-                            time.sleep(1.0) 
-                            continue 
+                            # --- TIMEOUT 2: UI Error -> Jalankan FIXUI pertama ---
+                            elif self.timeout_strike_counter == 2:
+                                print("    -> Aksi: Menganggap UI Error. Menjalankan FIXUI Ke-1...")
+                                self.execute_fixui_recovery() # F8 -> fixui -> Enter -> F8 (Bawaan fungsi Anda)
+                                time.sleep(1.0) # Jeda 1 detik sesuai instruksi
+                                print("    -> Memulai lempar kembali pasca-fixui...")
+                                self.io.tap_key_scancode(0x04) # Tekan 3
+                                self.fase1_start_time = time.time()
+                                time.sleep(1.5)
+                                continue
+                                
+                            # --- TIMEOUT 3: Tekan 3 lagi setelah fixui pertama ---
+                            elif self.timeout_strike_counter == 3:
+                                print("    -> Aksi: Tetap tidak ada UI. Mencoba tekan '3' lagi untuk memastikan...")
+                                self.io.tap_key_scancode(0x04) # Tekan 3
+                                self.fase1_start_time = time.time()
+                                time.sleep(1.5)
+                                continue
+                                
+                            # --- TIMEOUT 4: Jalankan FIXUI kedua ---
+                            elif self.timeout_strike_counter == 4:
+                                print("    -> Aksi: Masih tidak terlihat. Menjalankan FIXUI Ke-2...")
+                                self.execute_fixui_recovery() # F8 -> fixui -> Enter -> F8
+                                time.sleep(1.0) # Jeda 1 detik
+                                print("    -> Memulai lempar kembali pasca-fixui Ke-2...")
+                                self.io.tap_key_scancode(0x04) # Tekan 3
+                                self.fase1_start_time = time.time()
+                                time.sleep(1.5)
+                                continue
+                                
+                            # --- TIMEOUT 5: Lempar pancing biasa pasca-fixui kedua ---
+                            elif self.timeout_strike_counter == 5:
+                                print("    -> Aksi: Pasca-fixui 2 tetap zonk. Tekan '3' untuk percobaan terakhir...")
+                                self.io.tap_key_scancode(0x04) # Tekan 3
+                                self.fase1_start_time = time.time()
+                                time.sleep(1.5)
+                                continue
 
+                            # --- TIMEOUT 6: Sudah 2x timeout setelah FIXUI kedua -> Dialihkan ke Standby ---
+                            elif self.timeout_strike_counter >= 6:
+                                print("\n[🚨] KONDISI KRITIS MUTLAK: Sudah menjalankan FixUI 2x dan 2x Timeout beruntun setelahnya!")
+                                print("[🔒] Menghentikan siklus bot otomatis dan kembali ke MODE STANDBY...\n")
+                                self.io.safe_mouse_up()
+                                self.state = "FASE_0_STANDBY"
+                                self.reset_minigame_state()
+                                self.timeout_strike_counter = 0 # Bersihkan counter total
+                                time.sleep(1.0)
+                                continue
+
+                        # ------------------------------------------------------
+                        # PEMINDAIAN GAMBAR NORMAL FASE 1 -> FASE 2
+                        # ------------------------------------------------------
                         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
                         mask_grad = cv2.inRange(hsv_frame, self.lower_grad, self.upper_grad)
                         contours, _ = cv2.findContours(mask_grad, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -404,9 +449,8 @@ class FishingBot:
                                     time.sleep(0.2) 
                                     self.io.safe_mouse_up() 
                                     
-                                    # Minigame berhasil ditemukan, reset seluruh counter pelacak error
+                                    # [PENTING] Begitu minigame terdeteksi normal, reset TOTAL kegagalan menjadi 0 kembali
                                     self.timeout_strike_counter = 0
-                                    self.recovery_strike_counter = 0
                                     
                                     self.reset_minigame_state()
                                     self.state = "FASE_3_MINIGAME"
@@ -414,7 +458,7 @@ class FishingBot:
                                     self.last_seen_time = time.time() 
                                 else:
                                     action_text = f"NOISE REJ (W:{w} H:{h})"
-
+                                    
                     elif self.state == "FASE_3_MINIGAME":
                         if time.time() - self.phase3_start_time > 480:
                             self.io.safe_mouse_up()
