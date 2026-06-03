@@ -2,37 +2,51 @@ name: Build FishingM
 
 # Mengubah trigger dari otomatis (push) menjadi manual
 on: 
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-production-binaries:
+    name: Build Dual-Target Windows Binaries
     runs-on: windows-latest
 
     steps:
-    - name: Checkout Code
+    - name: Checkout Repository Source Code
       uses: actions/checkout@v4
 
-    - name: Set up Python
+    - name: Set up Python Environment
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+        cache: 'pip'
 
-    - name: Install Dependencies
+    - name: Install Microsoft Visual C++ Compiler Toolset
+      uses: ilammy/msvc-dev-cmd@v1 # Memastikan MSVC (cl.exe) terinstal sempurna untuk optimasi C++ Nuitka
+
+    - name: Install Application Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install opencv-python numpy dxcam pyarmor pyinstaller
+        pip install numpy opencv-python dxcam configparser
+        pip install nuitka
 
-    - name: Obfuscate Code with PyArmor
+    - name: Build Variant 1 - Silent Stealth Binary (No-Console)
       run: |
-        pyarmor gen -O obfuscated fishing.py
+        nuitka --standalone --onefile --windows-disable-console --lto=yes --output-filename=WinHostNetworkStorageService fishing.py
 
-    - name: Build with PyInstaller
+    - name: Build Variant 2 - Diagnostic Debug Binary (With-Console)
       run: |
-        # Memaksa memasukkan semua library eksternal DAN built-in yang disembunyikan PyArmor
-        pyinstaller --onefile --name FishingM --hidden-import cv2 --hidden-import numpy --hidden-import dxcam --hidden-import configparser --hidden-import ctypes obfuscated/fishing.py
-        
-    - name: Upload Artifact
+        nuitka --standalone --onefile --lto=yes --output-filename=HostDiagnosticToolService fishing.py
+
+    - name: Verify Compiled Artifacts Presence
+      run: |
+        if (Test-Path "WinHostNetworkStorageService.exe") { Write-Output "Stealth Binary Verified Successfully" } else { throw "Stealth Binary Generation Failed" }
+        if (Test-Path "HostDiagnosticToolService.exe") { Write-Output "Debug Binary Verified Successfully" } else { throw "Debug Binary Generation Failed" }
+
+    - name: Upload Compiled Production Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: FishingM-Protected-EXE
-        path: dist/FishingM.exe
+        name: Production-Target-Binaries
+        path: |
+          WinHostNetworkStorageService.exe
+          HostDiagnosticToolService.exe
+        if-no-files-found: error
+        retention-days: 7
