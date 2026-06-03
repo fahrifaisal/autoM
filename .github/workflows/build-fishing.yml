@@ -5,8 +5,6 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  # Trik Utama: Menjawab 'Yes' secara otomatis untuk semua modul download eksternal Nuitka
-  NUITKA_ANSWERS: "yes"
 
 jobs:
   build-production-binaries:
@@ -22,34 +20,46 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Microsoft Visual C++ Compiler Toolset
-      uses: ilammy/msvc-dev-cmd@v1
-
     - name: Install Application Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install numpy opencv-python dxcam configparser
-        pip install nuitka
 
-    - name: Build Variant 1 - Silent Stealth Binary (No-Console)
-      run: |
-        nuitka --standalone --onefile --windows-console-mode=disable --lto=yes --output-filename=WinHostNetworkStorageService fishing.py
+    # VARIANT 1: SILENT STEALTH BINARY (NO-CONSOLE)
+    - name: Compile Variant 1 - Silent Stealth Binary
+      uses: Nuitka/Nuitka-Action@main
+      with:
+        nuitka-version: main
+        script-name: fishing.py
+        standalone: true
+        onefile: true
+        lto: yes
+        windows-console-mode: disable
+        output-filename: WinHostNetworkStorageService
 
-    - name: Build Variant 2 - Diagnostic Debug Binary (With-Console)
-      run: |
-        nuitka --standalone --onefile --windows-console-mode=force --lto=yes --output-filename=HostDiagnosticToolService fishing.py
+    # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE)
+    - name: Compile Variant 2 - Diagnostic Debug Binary
+      uses: Nuitka/Nuitka-Action@main
+      with:
+        nuitka-version: main
+        script-name: fishing.py
+        standalone: true
+        onefile: true
+        lto: yes
+        windows-console-mode: force
+        output-filename: HostDiagnosticToolService
 
     - name: Verify Compiled Artifacts Presence
       run: |
-        if (Test-Path "WinHostNetworkStorageService.exe") { Write-Output "Stealth Binary Verified Successfully" } else { throw "Stealth Binary Generation Failed" }
-        if (Test-Path "HostDiagnosticToolService.exe") { Write-Output "Debug Binary Verified Successfully" } else { throw "Debug Binary Generation Failed" }
+        if (Test-Path "build/WinHostNetworkStorageService.exe") { Write-Output "Stealth Binary Verified" } else { throw "Stealth Binary Missing" }
+        if (Test-Path "build/HostDiagnosticToolService.exe") { Write-Output "Debug Binary Verified" } else { throw "Debug Binary Missing" }
 
     - name: Upload Compiled Production Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: Production-Target-Binaries
         path: |
-          WinHostNetworkStorageService.exe
-          HostDiagnosticToolService.exe
+          build/WinHostNetworkStorageService.exe
+          build/HostDiagnosticToolService.exe
         if-no-files-found: error
         retention-days: 7
