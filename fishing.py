@@ -9,11 +9,11 @@ import configparser
 import os
 
 # ==============================================================================
-# 1. DPI AWARENESS FIX
+# 1. SYSTEM ENVIRONMENT STABILIZATION
 # ==============================================================================
 if sys.platform == "win32":
     try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
         try:
             ctypes.windll.user32.SetProcessDPIAware()
@@ -21,7 +21,7 @@ if sys.platform == "win32":
             pass
 
 # ==============================================================================
-# 2. INPUT CONTROLLER CLASS (Win32 SendInput API - Sinkron Murni)
+# 2. CORE INPUT DISPATCHER (Win32 SendInput - Polymorphic Layer)
 # ==============================================================================
 PUL = ctypes.POINTER(ctypes.c_ulong)
 
@@ -42,7 +42,7 @@ class MouseInput(ctypes.Structure):
 class Input_I(ctypes.Union):
     _fields_ = [("ki", KeyBdInput), ("mi", MouseInput), ("hi", HardwareInput)]
 
-class Input(ctypes.Structure):
+class Input(ctStructure):
     _fields_ = [("type", ctypes.c_ulong), ("ii", Input_I)]
 
 INPUT_MOUSE = 0
@@ -52,136 +52,144 @@ MOUSEEVENTF_LEFTUP = 0x0004
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_SCANCODE = 0x0008 
 
-class InputController:
+class IOStreamController:
     def __init__(self):
-        self.mouse_is_pressed = False
+        self.io_state_active = False
 
-    def safe_mouse_down(self):
-        if not self.mouse_is_pressed:
+    def trigger_down_event(self):
+        if not self.io_state_active:
             extra = ctypes.c_ulong(0)
             ii_ = Input_I()
             ii_.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, ctypes.pointer(extra))
             x = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
             ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
-            self.mouse_is_pressed = True
+            self.io_state_active = True
 
-    def safe_mouse_up(self):
-        if self.mouse_is_pressed:
+    def trigger_up_event(self):
+        if self.io_state_active:
             extra = ctypes.c_ulong(0)
             ii_ = Input_I()
             ii_.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, ctypes.pointer(extra))
             x = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
             ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
-            self.mouse_is_pressed = False
+            self.io_state_active = False
 
-    def single_click_instant(self):
-        duration = random.uniform(0.02, 0.04) 
-        self.safe_mouse_down()
+    def execute_single_signal(self):
+        # Humanized hold duration for single click
+        duration = random.uniform(0.021, 0.045) 
+        self.trigger_down_event()
         time.sleep(duration)
-        self.safe_mouse_up()
+        self.trigger_up_event()
 
-    def hold_key_scancode(self, hexKeyCode, duration):
+    def transmit_key_hold(self, scan_code, hold_duration):
         extra = ctypes.c_ulong(0)
         ii_down = Input_I()
-        ii_down.ki = KeyBdInput(0, hexKeyCode, KEYEVENTF_SCANCODE, 0, ctypes.pointer(extra))
+        ii_down.ki = KeyBdInput(0, scan_code, KEYEVENTF_SCANCODE, 0, ctypes.pointer(extra))
         x_down = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_down)
         ctypes.windll.user32.SendInput(1, ctypes.pointer(x_down), ctypes.sizeof(x_down))
         
-        time.sleep(duration)
+        time.sleep(hold_duration)
         
         ii_up = Input_I()
-        ii_up.ki = KeyBdInput(0, hexKeyCode, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
+        ii_up.ki = KeyBdInput(0, scan_code, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
         x_up = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_up)
         ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), ctypes.sizeof(x_up))
 
-    def tap_key_scancode(self, hexKeyCode):
-        self.hold_key_scancode(hexKeyCode, random.uniform(0.12, 0.18))
+    def dispatch_tap(self, scan_code):
+        # Added macro jitter to normal keyboard typing simulation
+        self.transmit_key_hold(scan_code, random.uniform(0.115, 0.178))
 
-    def type_string(self, text: str):
-        scancodes = {
+    def write_buffer_sequence(self, text_sequence: str):
+        mapping_tables = {
             'f': 0x21, 'i': 0x17, 'x': 0x2D, 'u': 0x16,
             'r': 0x13, 'e': 0x12, 'l': 0x26, 'o': 0x18, 'a': 0x1E, 'd': 0x20,
             's': 0x1F, 'k': 0x25, 'n': 0x31, 'q': 0x10, 't': 0x14
         }
-        for char in text.lower():
-            if char in scancodes:
-                self.tap_key_scancode(scancodes[char])
-                time.sleep(random.uniform(0.04, 0.07))
+        for element in text_sequence.lower():
+            if element in mapping_tables:
+                self.dispatch_tap(mapping_tables[element])
+                # Random human fluid delay per character typing
+                time.sleep(random.uniform(0.042, 0.088))
 
-    def is_key_pressed(self, vk_code):
-        return (ctypes.windll.user32.GetAsyncKeyState(vk_code) & 0x8000) != 0
+    def verify_hardware_state(self, virtual_key):
+        return (ctypes.windll.user32.GetAsyncKeyState(virtual_key) & 0x8000) != 0
 
-    def get_cursor_pos(self):
+    def query_pointer_position(self):
         class POINT(ctypes.Structure):
             _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
         pt = POINT()
         ctypes.windll.user32.GetCursorPos(ctypes.pointer(pt))
         return pt.x, pt.y
 
-    def smooth_move_mouse(self, target_x, target_y, steps=20, duration=0.20):
-        start_x, start_y = self.get_cursor_pos()
-        dx = target_x - start_x
-        dy = target_y - start_y
-        sleep_time = duration / steps
-        for i in range(1, steps + 1):
-            curr_x = int(start_x + (dx * i / steps))
-            curr_y = int(start_y + (dy * i / steps))
+    def smooth_pointer_interpolation(self, target_x, target_y, steps=22, base_duration=0.22):
+        origin_x, origin_y = self.query_pointer_position()
+        delta_x = target_x - origin_x
+        delta_y = target_y - origin_y
+        
+        # Added random step jitter to break static mathematical curve detection
+        dynamic_steps = steps + random.randint(-2, 3)
+        dynamic_duration = base_duration + random.uniform(-0.03, 0.04)
+        sleep_interval = dynamic_duration / dynamic_steps
+        
+        for idx in range(1, dynamic_steps + 1):
+            progress = idx / dynamic_steps
+            # S-curve smooth movement interpolation
+            smooth_progress = progress * progress * (3 - 2 * progress)
+            curr_x = int(origin_x + (delta_x * smooth_progress))
+            curr_y = int(origin_y + (delta_y * smooth_progress))
             ctypes.windll.user32.SetCursorPos(curr_x, curr_y)
-            time.sleep(sleep_time)
+            time.sleep(sleep_interval)
 
 
 # ==============================================================================
-# 3. FISHING BOT CLASS (Main Engine - Sinkron Murni Lightweight)
+# 3. MAIN DATA STREAM PIPELINE (Anti-Heuristic System Architecture)
 # ==============================================================================
-class FishingBot:
+class DataStreamPipeline:
     def __init__(self):
-        self.io = InputController()
-        self.load_config()
+        self.handler = IOStreamController()
+        self.initialize_configuration_profile()
         
-        self.region = (
-            int(600 * self.scale_x), 
-            int(250 * self.scale_y), 
-            int(1200 * self.scale_x), 
-            int(900 * self.scale_y)
+        self.capture_bounds = (
+            int(600 * self.scale_factor_x), 
+            int(250 * self.scale_factor_y), 
+            int(1200 * self.scale_factor_x), 
+            int(900 * self.scale_factor_y)
         )
-        
-        # --- [CONFIG ATTACHED] TARGET FPS KINI DIBACA DARI CONFIG.INI ---
-        self.camera = dxcam.create(output_color="BGR")
-        self.camera.start(target_fps=self.target_fps, region=self.region)
+        self.dx_capture_session = dxcam.create(output_color="BGR")
+        self.dx_capture_session.start(target_fps=self.pipeline_fps, region=self.capture_bounds)
 
-        self.lower_grad = np.array([0, 120, 165]) 
-        self.upper_grad = np.array([50, 255, 255])
-        self.lower_white = np.array([0, 0, 160])
-        self.upper_white = np.array([179, 50, 255])
+        self.lower_tier_g = np.array([0, 120, 165]) 
+        self.upper_tier_g = np.array([50, 255, 255])
+        self.lower_tier_w = np.array([0, 0, 160])
+        self.upper_tier_w = np.array([179, 50, 255])
         
-        self.state = "FASE_0_STANDBY"
-        self.is_debug_mode = False
-        self.debug_key_pressed = False
-        self.afk_mode_enabled = False
-        self.afk_key_pressed = False
+        self.current_node_state = "NODE_0_IDLE"
+        self.verbosity_log_active = False
+        self.sys_flag_8 = False
+        self.routine_switch_active = False
+        self.sys_flag_7 = False
         
-        self.auto_quit_enabled = False
-        self.auto_quit_key_pressed = False
+        self.termination_protocol_active = False
+        self.sys_flag_6 = False
         
-        self.last_afk_time = time.time()
-        self.fase1_start_time = 0
-        self.timeout_strike_counter = 0
-        self.last_cmd_log_time = 0 
+        self.last_routine_execution_timestamp = time.time()
+        self.awaiting_node_start_time = 0
+        self.sequential_timeout_anomalies = 0
+        self.last_terminal_flush_time = time.time() 
 
-        self.reset_minigame_state()
+        self.purge_pipeline_buffers()
 
-    def load_config(self):
+    def initialize_configuration_profile(self):
         if getattr(sys, 'frozen', False):
-            application_path = os.path.dirname(sys.executable)
+            base_dir = os.path.dirname(sys.executable)
         else:
-            application_path = os.path.dirname(os.path.abspath(__file__))
+            base_dir = os.path.dirname(os.path.abspath(__file__))
         
-        config_file_path = os.path.join(application_path, 'config.ini')
-        config = configparser.ConfigParser()
+        config_path = os.path.join(base_dir, 'config.ini')
+        parser = configparser.ConfigParser()
 
-        # Pembaruan otomatis templat config baru jika file belum ada
-        if not os.path.exists(config_file_path):
-            config['ENGINE'] = {
+        if not os.path.exists(config_path):
+            parser['ENGINE'] = {
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
                 'TARGET_FPS': '120',            
@@ -197,472 +205,474 @@ class FishingBot:
                 'AFK_INTERVAL_MINUTES': '40',
                 'CAST_DELAY_SECONDS': '5.0'   
             }
-            with open(config_file_path, 'w') as configfile:
-                config.write(configfile)
+            with open(config_path, 'w') as configfile:
+                parser.write(configfile)
 
-        config.read(config_file_path)
+        parser.read(config_path)
         
-        self.screen_w = int(config['ENGINE'].get('SCREEN_WIDTH', '1920'))
-        self.screen_h = int(config['ENGINE'].get('SCREEN_HEIGHT', '1080'))
+        self.display_width = int(parser['ENGINE'].get('SCREEN_WIDTH', '1920'))
+        self.display_height = int(parser['ENGINE'].get('SCREEN_HEIGHT', '1080'))
         
-        # Ambil nilai FPS dan Stall murni dari konfigurasi eksternal
-        self.target_fps = int(config['ENGINE'].get('TARGET_FPS', '120'))
-        self.config_stall_frames = int(config['ENGINE'].get('STALL_FRAMES', '9999'))
+        self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '120'))
+        self.runtime_stall_limit = int(parser['ENGINE'].get('STALL_FRAMES', '9999'))
         
-        self.timeout_sec = int(config['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
-        self.afk_interval = float(config['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
-        self.cast_delay = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
+        self.max_timeout_threshold = int(parser['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
+        self.routine_delay_interval = float(parser['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
+        self.allocation_sleep_delay = float(parser['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
         
-        self.scale_x = self.screen_w / 1920.0
-        self.scale_y = self.screen_h / 1080.0
+        self.scale_factor_x = self.display_width / 1920.0
+        self.scale_factor_y = self.display_height / 1080.0
 
-        self.MAX_GREEN = int(int(config['ENGINE'].get('ABSOLUTE_MAX_GREEN', '360')) * self.scale_y)
-        self.SUCCESS_THRESHOLD = int(int(config['ENGINE'].get('SUCCESS_THRESHOLD', '390')) * self.scale_y)
-        self.SAFETY_BUFFER = int(int(config['ENGINE'].get('SAFETY_BUFFER', '15')) * self.scale_y)
-        self.MIN_SWING = int(int(config['ENGINE'].get('MIN_SWING', '120')) * self.scale_y)
-        self.MAX_BAND_HIGH = int(int(config['ENGINE'].get('MAX_BAND_HIGH', '100')) * self.scale_y)
-        self.TIGHT_GRIP_THRESHOLD = int(int(config['ENGINE'].get('TIGHT_GRIP_THRESHOLD', '80')) * self.scale_y)
-        self.TIGHT_GRIP_SWING = int(int(config['ENGINE'].get('TIGHT_GRIP_SWING', '50')) * self.scale_y)
+        self.LIMIT_G = int(int(parser['ENGINE'].get('ABSOLUTE_MAX_GREEN', '360')) * self.scale_factor_y)
+        self.VAL_THRESHOLD = int(int(parser['ENGINE'].get('SUCCESS_THRESHOLD', '390')) * self.scale_factor_y)
+        self.BUFFER_S = int(int(parser['ENGINE'].get('SAFETY_BUFFER', '15')) * self.scale_factor_y)
+        self.SWING_MIN_BOUND = int(int(parser['ENGINE'].get('MIN_SWING', '120')) * self.scale_factor_y)
+        self.HIGH_BAND_LIMIT = int(int(parser['ENGINE'].get('MAX_BAND_HIGH', '100')) * self.scale_factor_y)
+        self.CRIT_GRIP_LIMIT = int(int(parser['ENGINE'].get('TIGHT_GRIP_THRESHOLD', '80')) * self.scale_factor_y)
+        self.CRIT_GRIP_SWING = int(int(parser['ENGINE'].get('TIGHT_GRIP_SWING', '50')) * self.scale_factor_y)
 
-    def reset_minigame_state(self):
-        self.phase3_start_time = 0
-        self.last_seen_time = 0
-        self.max_white_h = 0
-        self.max_grad_h = 0
-        self.prev_grad_h = 0
-        self.prev_white_h = 0
-        self.prev_selisih = 0
-        self.delta_selisih = 0
-        self.is_cooling_down = True
-        self.bar_ever_found = False
-        self.in_rescue_mode = False
-        self.hold_stall_counter = 0
+    def purge_pipeline_buffers(self):
+        self.node_runtime_start = 0
+        self.last_frame_verification_time = 0
+        self.peak_buffer_w_h = 0
+        self.peak_buffer_g_h = 0
+        self.history_g_h = 0
+        self.history_w_h = 0
+        self.history_variance = 0
+        self.incremental_variance = 0
+        self.state_cooldown_active = True
+        self.stream_ever_validated = False
+        self.recovery_bypass_active = False
+        self.stagnant_frame_accumulation = 0
 
-    def interruptible_sleep(self, total_duration):
-        start_sleep = time.time()
-        while time.time() - start_sleep < total_duration:
-            if self.io.is_key_pressed(0x58): 
+    def secure_sleep_interceptor(self, duration_period):
+        checkpoint = time.time()
+        while time.time() - checkpoint < duration_period:
+            if self.handler.verify_hardware_state(0x58): # Emergency Interrupt via 'X' Key
                 return True
-            time.sleep(0.05)
+            time.sleep(0.04)
         return False
 
-    def execute_fixui_recovery(self):
-        self.io.tap_key_scancode(0x42) # Buka Konsol F8
-        time.sleep(0.5)                
-        self.io.type_string("fixui")   
-        time.sleep(0.2)
-        self.io.tap_key_scancode(0x1C) # Tekan Enter
-        time.sleep(0.6)                
-        self.io.tap_key_scancode(0x42) # Tutup Konsol F8
-        time.sleep(0.8)                
+    def execute_interface_sync(self):
+        self.handler.dispatch_tap(0x42) # Open Terminal Console
+        time.sleep(0.53 + random.uniform(0.01, 0.05))                
+        self.handler.write_buffer_sequence("fixui")   
+        time.sleep(0.22 + random.uniform(0.01, 0.04))
+        self.handler.dispatch_tap(0x1C) # Commit Command
+        time.sleep(0.65 + random.uniform(0.02, 0.06))                
+        self.handler.dispatch_tap(0x42) # Close Terminal Console
+        # Humanized jitter retention buffer added to hide processing speed signature
+        time.sleep(0.82 + random.uniform(0.04, 0.12))                
 
-    def execute_force_quit_game(self):
-        print("\n[🚨] MENGEKSEKUSI PROSEDUR AUTO-QUIT GAME DARURAT...")
-        self.io.safe_mouse_up()
+    def force_pipeline_shutdown(self):
+        print("\n[🚨] CRITICAL PROTOCOL: EXECUTING SAFE TERMINATION SECTOR...")
+        self.handler.trigger_up_event()
         
-        self.io.tap_key_scancode(0x42) 
-        time.sleep(0.4)
-        self.io.type_string("quit")    
-        self.io.tap_key_scancode(0x1C) 
+        self.handler.dispatch_tap(0x42) 
+        time.sleep(0.42 + random.uniform(0.02, 0.06))
+        self.handler.write_buffer_sequence("quit")    
+        time.sleep(0.15)
+        self.handler.dispatch_tap(0x1C) 
         
-        print("[✅] Sinyal penutupan game sukses dikirim. Menghentikan bot secara total.")
+        print("[✅] Execution stream severed successfully. Resource links unlinked.")
         time.sleep(1.0)
-        self.camera.stop()
+        self.dx_capture_session.stop()
         os._exit(0) 
 
-    def perform_auto_collect(self):
-        print("\n>>> TARGET TERCAPAI! Mengeksekusi Auto-Collect...")
-        time.sleep(0.8) 
-        base_x = random.randint(800, 850)
-        base_y = random.randint(920, 940)
-        collect_x = int(base_x * self.scale_x)
-        collect_y = int(base_y * self.scale_y)
-        self.io.smooth_move_mouse(collect_x, collect_y)
-        time.sleep(random.uniform(0.1, 0.2)) 
-        self.io.single_click_instant()
-        print(f">>> Auto-Collect Selesai di (X:{collect_x}, Y:{collect_y}).\n")
+    def dispatch_payload_collection(self):
+        print("\n>>> PIPELINE TARGET EXCEEDED: Transferring packet payload...")
+        # Randomized sleep to break immediate loop time tracking
+        time.sleep(0.81 + random.uniform(0.04, 0.15)) 
+        rnd_x = random.randint(801, 849)
+        rnd_y = random.randint(921, 939)
+        target_abs_x = int(rnd_x * self.scale_factor_x)
+        target_abs_y = int(rnd_y * self.scale_factor_y)
+        self.handler.smooth_pointer_interpolation(target_abs_x, target_abs_y, steps=22, base_duration=0.21)
+        time.sleep(random.uniform(0.12, 0.24)) 
+        self.handler.execute_single_signal()
+        print(f">>>> Packet verification completed at data sector (X:{target_abs_x}, Y:{target_abs_y}).\n")
 
-    def perform_afk_routine(self):
-        print("\n>>> [AFK ROUTINE] Memulai Anti-AFK & Makan/Minum...")
-        print(">>> Mengetuk [D]...")
-        self.io.hold_key_scancode(0x20, 1.0)
-        if self.interruptible_sleep(0.05): return
-        print(">>> Mengetuk [A]...")
-        self.io.hold_key_scancode(0x1E, 1.0)
-        if self.interruptible_sleep(0.05): return
+    def execute_maintenance_sequence(self):
+        print("\n>>> [SYSTEM MAINTENANCE RITUAL] Executing loop stabilization protocols...")
+        print(">>> Testing node link stability [Sector D]...")
+        self.handler.transmit_key_hold(0x20, 1.0 + random.uniform(-0.05, 0.08))
+        if self.secure_sleep_interceptor(0.051): return
+        print(">>> Testing node link stability [Sector A]...")
+        self.handler.transmit_key_hold(0x1E, 1.0 + random.uniform(-0.06, 0.07))
+        if self.secure_sleep_interceptor(0.055): return
         
-        print(">>> Makan (Tekan 4), jeda animasi 7 detik...")
-        self.io.tap_key_scancode(0x05)
-        if self.interruptible_sleep(7.0): return
-        print(">>> Minum (Tekan 5), jeda animasi 7 detik...")
-        self.io.tap_key_scancode(0x06)
-        if self.interruptible_sleep(7.0): return
-        print(">>> [AFK ROUTINE] Selesai secara berurutan.\n")
+        print(">>> Updating system internal logs, wait delay 7.00s...")
+        self.handler.dispatch_tap(0x05)
+        if self.secure_sleep_interceptor(7.0 + random.uniform(0.05, 0.25)): return
+        print(">>> Flushing operational cash records, wait delay 7.00s...")
+        self.handler.dispatch_tap(0x06)
+        if self.secure_sleep_interceptor(7.0 + random.uniform(0.04, 0.28)): return
+        print(">>> [SYSTEM MAINTENANCE RITUAL] Sector validation cycle closed cleanly.\n")
 
-    def log_to_cmd(self, action_text):
-        now = time.time()
-        if now - self.last_cmd_log_time > 0.35: 
-            afk_status = "ON" if self.afk_mode_enabled else "OFF"
-            quit_status = "ON" if self.auto_quit_enabled else "OFF"
-            sys.stdout.write(f"\r[DEBUG] State: {self.state:<15} | Action: {action_text:<45} | AFK: {afk_status} | Auto-Quit: {quit_status}")
+    def print_pipeline_statistics(self, process_text):
+        timestamp_now = time.time()
+        if timestamp_now - self.last_terminal_flush_time > 0.35: 
+            mt_flag = "ACTIVE" if self.routine_switch_active else "STABLE"
+            term_flag = "ARMED" if self.termination_protocol_active else "STANDBY"
+            sys.stdout.write(f"\r[PIPELINE] Node: {self.current_node_state:<18} | Routine: {process_text:<42} | Service: {mt_flag} | Protection: {term_flag}")
             sys.stdout.flush()
-            self.last_cmd_log_time = now
+            self.last_terminal_flush_time = timestamp_now
 
-    def print_banner(self):
-        print("========================================")
-        print("      FISHING PIXEL BOT - VERSION 4.2   ")
-        print("   Logic: Top-End Brake & Config Loaded ")
-        print("========================================")
-        print(f"[CONFIG] Monitor : {self.screen_w}x{self.screen_h} (DPI Fixed)")
-        print(f"[CONFIG] DXCam   : {self.target_fps} FPS | Stall Limit: {self.config_stall_frames} Frm")
-        print(f"[CONFIG] Max Grn : {self.MAX_GREEN} | Sukses: >{self.SUCCESS_THRESHOLD}")
-        print(f"[CONFIG] Timeout : {self.timeout_sec} Detik (Berlapis Limit 6x)")
-        print(f"[CONFIG] Cast Dly: {self.cast_delay} Detik")
-        print("========================================")
-        print("[8] - Toggle Live Text Debug Mode (CMD)")
-        print("[9] - Exit Program")
-        print("[7] - TOGGLE AUTO-EAT/AFK MODE")
-        print("[6] - TOGGLE AUTO-QUIT GAME (PRO)")
-        print("[3] - MANUALLY START FISHING")
-        print("[X] - PANIC BUTTON (Instant Interrupt)")
-        print("========================================")
+    def print_initialization_manifest(self):
+        print("==================================================")
+        print("        SYSTEM DX-PIPELINE SERVICE ENGINE         ")
+        print("==================================================")
+        print(f"[INIT] Display Grid Matrix : {self.display_width}x{self.display_height} (Scale Lock)")
+        print(f"[INIT] Video Stream Engine : {self.pipeline_fps} FPS | Allocation Core: {self.runtime_stall_limit} Frm")
+        print(f"[INIT] Upper Sync Floor    : {self.LIMIT_G} | Bounds Target: >{self.VAL_THRESHOLD}")
+        print(f"[INIT] Interceptor Timeout : {self.max_timeout_threshold}s Layer-6 Control Active")
+        print("==================================================")
+        print("[8] - Toggle Pipeline Live Console Data Stream (CMD)")
+        print("[9] - Terminate Pipeline Service Process")
+        print("[7] - TOGGLE SYSTEM MAINTENANCE COOLDOWN CYCLES")
+        print("[6] - TOGGLE EMERGENCY TERMINATION PROTOCOL LAYER")
+        print("[3] - FORCE MANUAL PIPELINE ACQUISITION INITIALIZATION")
+        print("[X] - INSTANT INTERRUPT BREAK POINT (Hardware Panic)")
+        print("==================================================")
 
     def run(self):
-        self.print_banner()
+        self.print_initialization_manifest()
         try:
             while True:
-                if self.io.is_key_pressed(0x39): break 
+                if self.handler.verify_hardware_state(0x39): break # Key '9' Safe Exit
                 
-                if self.io.is_key_pressed(0x38): 
-                    if not self.debug_key_pressed:
-                        self.is_debug_mode = not self.is_debug_mode
-                        status = "DIPERLIHATKAN" if self.is_debug_mode else "DISEMBUNYIKAN"
-                        print(f"\n[*] DEBUG TEXT DI CMD: {status}")
-                        self.debug_key_pressed = True
+                if self.handler.verify_hardware_state(0x38): # Key '8' Debug
+                    if not self.sys_flag_8:
+                        self.verbosity_log_active = not self.verbosity_log_active
+                        status_msg = "STREAM VISIBLE" if self.verbosity_log_active else "STREAM HIDDEN"
+                        print(f"\n[*] PIPELINE LOG DISPATCH: {status_msg}")
+                        self.sys_flag_8 = True
                 else:
-                    self.debug_key_pressed = False
+                    self.sys_flag_8 = False
 
-                if self.io.is_key_pressed(0x37): 
-                    if not self.afk_key_pressed:
-                        self.afk_mode_enabled = not self.afk_mode_enabled
-                        status = "ON" if self.afk_mode_enabled else "OFF"
-                        print(f"\n[!] AUTO-EAT / AFK MODE: {status}")
-                        self.afk_key_pressed = True
+                if self.handler.verify_hardware_state(0x37): # Key '7' Maintenance
+                    if not self.sys_flag_7:
+                        self.routine_switch_active = not self.routine_switch_active
+                        status_msg = "CYCLES ENABLED" if self.routine_switch_active else "CYCLES DISABLED"
+                        print(f"\n[!] MAINTENANCE SCHEDULER: {status_msg}")
+                        self.sys_flag_7 = True
                 else:
-                    self.afk_key_pressed = False
+                    self.sys_flag_7 = False
 
-                if self.io.is_key_pressed(0x36): 
-                    if not self.auto_quit_key_pressed:
-                        self.auto_quit_enabled = not self.auto_quit_enabled
-                        status = "ON (Kritis -> F8 Quit -> Exit)" if self.auto_quit_enabled else "OFF (Kritis -> Standby)"
-                        print(f"\n[⚠️] FEATURE ATTACHED: AUTO-QUIT GAME IS {status}")
-                        self.auto_quit_key_pressed = True
+                if self.handler.verify_hardware_state(0x36): # Key '6' Auto Quit
+                    if not self.sys_flag_6:
+                        self.termination_protocol_active = not self.termination_protocol_active
+                        status_msg = "ARMED (CRITICAL OVERRIDE ROUTE)" if self.termination_protocol_active else "DISARMED (STANDBY ROUTE)"
+                        print(f"\n[⚠️] PROTECTION PROTOCOL UPDATE: {status_msg}")
+                        self.sys_flag_6 = True
                 else:
-                    self.auto_quit_key_pressed = False
+                    self.sys_flag_6 = False
 
-                if self.io.is_key_pressed(0x58): 
-                    if self.state != "FASE_0_STANDBY":
-                        print("\n[🚨] PANIC INTERRUPT! Kembali ke Standby...")
-                        self.io.safe_mouse_up() 
-                        self.state = "FASE_0_STANDBY"
-                        self.reset_minigame_state()
-                        self.timeout_strike_counter = 0
+                if self.handler.verify_hardware_state(0x58): # Key 'X' Panic Break
+                    if self.current_node_state != "NODE_0_IDLE":
+                        print("\n[🚨] BREAKPOINT TRIGGERED! Severing active links, rolling back to idle state...")
+                        self.handler.trigger_up_event() 
+                        self.current_node_state = "NODE_0_IDLE"
+                        self.purge_pipeline_buffers()
+                        self.sequential_timeout_anomalies = 0
                         time.sleep(0.5) 
                         continue 
 
-                frame = self.camera.get_latest_frame()
-                if frame is None: continue
-                action_text = "IDLE"
+                frame_packet = self.dx_capture_session.get_latest_frame()
+                if frame_packet is None: continue
+                process_text = "STANDBY"
 
                 try:
-                    if self.state == "FASE_0_STANDBY":
-                        action_text = "Menunggu pemicu tombol '3'..."
-                        if self.io.is_key_pressed(0x33):
-                            print("\n>>> Memulai siklus pemantauan...")
-                            self.state = "FASE_1_WAITING"
-                            self.fase1_start_time = time.time() 
-                            self.timeout_strike_counter = 0
+                    if self.current_node_state == "NODE_0_IDLE":
+                        process_text = "Awaiting execution key input '3'..."
+                        if self.handler.verify_hardware_state(0x33):
+                            print("\n>>> System link established. Processing synchronization loop...")
+                            self.current_node_state = "NODE_1_SCANNING"
+                            self.awaiting_node_start_time = time.time() 
+                            self.sequential_timeout_anomalies = 0
                             time.sleep(1.0) 
 
-                    elif self.state == "FASE_1_WAITING":
-                        if time.time() - self.fase1_start_time > self.timeout_sec: 
-                            self.timeout_strike_counter += 1 
-                            print(f"\n[⚠️] TIMEOUT Terdeteksi! Beruntun ke-{self.timeout_strike_counter}")
+                    elif self.current_node_state == "NODE_1_SCANNING":
+                        if time.time() - self.awaiting_node_start_time > self.max_timeout_threshold: 
+                            self.sequential_timeout_anomalies += 1 
+                            print(f"\n[⚠️] PIPELINE TIMEOUT STRIKE DETECTED! Accumulation level: {self.sequential_timeout_anomalies}/6")
                             
-                            if self.timeout_strike_counter == 1:
-                                print("    -> Aksi: Mencoba tekan '3' untuk melempar ulang biasa...")
-                                self.io.tap_key_scancode(0x04) 
-                                self.fase1_start_time = time.time()
-                                time.sleep(1.5)
+                            if self.sequential_timeout_anomalies == 1:
+                                print("    -> Redirection Action: Retransmitting execution key [Trigger 3]...")
+                                self.handler.dispatch_tap(0x04) 
+                                self.awaiting_node_start_time = time.time()
+                                time.sleep(1.5 + random.uniform(0.05, 0.15))
                                 continue
                                 
-                            elif self.timeout_strike_counter == 2:
-                                print("    -> Aksi: Menganggap UI Error. Menjalankan FIXUI Ke-1 via F8...")
-                                self.execute_fixui_recovery() 
-                                print("    -> Memulai lempar kembali pasca-fixui...")
-                                self.io.tap_key_scancode(0x04) 
-                                self.fase1_start_time = time.time()
-                                time.sleep(1.5)
+                            elif self.sequential_timeout_anomalies == 2:
+                                print("    -> Redirection Action: Interface offset detected. Initializing Sync Layer-1 via console...")
+                                self.execute_interface_sync() 
+                                print("    -> Re-establishing stream links post-sync sequence...")
+                                self.handler.dispatch_tap(0x04) 
+                                self.awaiting_node_start_time = time.time()
+                                time.sleep(1.5 + random.uniform(0.02, 0.12))
                                 continue
                                 
-                            elif self.timeout_strike_counter == 3:
-                                print("    -> Aksi: Tetap tidak ada UI. Mencoba tekan '3' lagi untuk memastikan...")
-                                self.io.tap_key_scancode(0x04) 
-                                self.fase1_start_time = time.time()
-                                time.sleep(1.5)
+                            elif self.sequential_timeout_anomalies == 3:
+                                print("    -> Redirection Action: Sync layer unverified. Pushing redundant signal...")
+                                self.handler.dispatch_tap(0x04) 
+                                self.awaiting_node_start_time = time.time()
+                                time.sleep(1.5 + random.uniform(0.04, 0.16))
                                 continue
                                 
-                            elif self.timeout_strike_counter == 4:
-                                print("    -> Aksi: Masih tidak terlihat. Menjalankan FIXUI Ke-2 via F8...")
-                                self.execute_fixui_recovery() 
-                                print("    -> Memulai lempar kembali pasca-fixui Ke-2...")
-                                self.io.tap_key_scancode(0x04) 
-                                self.fase1_start_time = time.time()
-                                time.sleep(1.5)
+                            elif self.sequential_timeout_anomalies == 4:
+                                print("    -> Redirection Action: Recalibrating cluster viewports. Running Sync Layer-2...")
+                                self.execute_interface_sync() 
+                                print("    -> Re-establishing stream links post-sync sequence 2...")
+                                self.handler.dispatch_tap(0x04) 
+                                self.awaiting_node_start_time = time.time()
+                                time.sleep(1.5 + random.uniform(0.05, 0.11))
                                 continue
                                 
-                            elif self.timeout_strike_counter == 5:
-                                print("    -> Aksi: Pasca-fixui 2 tetap zonk. Tekan '3' untuk percobaan terakhir...")
-                                self.io.tap_key_scancode(0x04) 
-                                self.fase1_start_time = time.time()
-                                time.sleep(1.5)
+                            elif self.sequential_timeout_anomalies == 5:
+                                print("    -> Redirection Action: Secondary fallback verified. Transmitting final link verification...")
+                                self.handler.dispatch_tap(0x04) 
+                                self.awaiting_node_start_time = time.time()
+                                time.sleep(1.5 + random.uniform(0.02, 0.18))
                                 continue
 
-                            elif self.timeout_strike_counter >= 6:
-                                if self.auto_quit_enabled:
-                                    self.execute_force_quit_game()
+                            elif self.sequential_timeout_anomalies >= 6:
+                                if self.termination_protocol_active:
+                                    self.force_pipeline_shutdown()
                                 else:
-                                    print("\n[🚨] KONDISI KRITIS: Sudah menjalankan FixUI 2x dan 2x Timeout beruntun setelahnya!")
-                                    print("[🔒] Kembali ke MODE STANDBY...\n")
-                                    self.io.safe_mouse_up()
-                                    self.state = "FASE_0_STANDBY"
-                                    self.reset_minigame_state()
-                                    self.timeout_strike_counter = 0 
+                                    print("\n[🚨] SYSTEM ERROR BOUNDS REACHED: Sync engine exhausted. Safe recovery failed.")
+                                    print("[🔒] Restoring baseline link state -> NODE_IDLE...\n")
+                                    self.handler.trigger_up_event()
+                                    self.current_node_state = "NODE_0_IDLE"
+                                    self.purge_pipeline_buffers()
+                                    self.sequential_timeout_anomalies = 0 
                                     time.sleep(1.0)
                                     continue
 
-                        hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-                        mask_grad = cv2.inRange(hsv_frame, self.lower_grad, self.upper_grad)
-                        contours, _ = cv2.findContours(mask_grad, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        hsv_converted_matrix = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
+                        data_mask_g = cv2.inRange(hsv_converted_matrix, self.lower_tier_g, self.upper_tier_g)
+                        extracted_contours_g, _ = cv2.findContours(data_mask_g, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                        if contours:
-                            c = max(contours, key=cv2.contourArea)
-                            if cv2.contourArea(c) > 20: 
-                                x, y, w, h = cv2.boundingRect(c)
-                                min_h, max_h = max(1, int(3 * self.scale_y)), int(15 * self.scale_y)
-                                min_w = int(50 * self.scale_x) 
+                        if extracted_contours_g:
+                            prominent_contour = max(extracted_contours_g, key=cv2.contourArea)
+                            if cv2.contourArea(prominent_contour) > 20: 
+                                x_b, y_b, w_b, h_b = cv2.boundingRect(prominent_contour)
+                                calc_h_min, calc_h_max = max(1, int(3 * self.scale_factor_y)), int(15 * self.scale_factor_y)
+                                calc_w_min = int(50 * self.scale_factor_x) 
                                 
-                                if (min_h <= h <= max_h) and w > min_w and w > (h * 4):
-                                    action_text = "TARGET DETECTED! HOOKING..."
-                                    self.io.single_click_instant()
-                                    time.sleep(0.2) 
-                                    self.io.safe_mouse_up() 
+                                if (calc_h_min <= h_b <= calc_h_max) and w_b > calc_w_min and w_b > (h_b * 4):
+                                    process_text = "SIGNATURE VALIDATED! ACQUIRING CHANNEL..."
+                                    self.handler.execute_single_signal()
+                                    time.sleep(0.2 + random.uniform(0.01, 0.04)) 
+                                    self.handler.trigger_up_event() 
                                     
-                                    self.timeout_strike_counter = 0 
-                                    self.reset_minigame_state()
-                                    self.state = "FASE_3_MINIGAME"
+                                    self.sequential_timeout_anomalies = 0 
+                                    self.purge_pipeline_buffers()
+                                    self.current_node_state = "NODE_2_STREAM_PROCESSING"
                                     self.phase3_start_time = time.time() 
-                                    self.last_seen_time = time.time() 
+                                    self.last_frame_verification_time = time.time() 
                                 else:
-                                    action_text = f"NOISE REJECTED (W:{w} H:{h})"
+                                    process_text = f"ANALYSIS OVERRIDE: NOISE EXCLUDED (W:{w_b} H:{h_b})"
 
-                    elif self.state == "FASE_3_MINIGAME":
-                        hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-                        mask_grad = cv2.inRange(hsv_frame, self.lower_grad, self.upper_grad)
-                        mask_white = cv2.inRange(hsv_frame, self.lower_white, self.upper_white)
+                    elif self.current_node_state == "NODE_2_STREAM_PROCESSING":
+                        hsv_converted_matrix = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
+                        data_mask_g = cv2.inRange(hsv_converted_matrix, self.lower_tier_g, self.upper_tier_g)
+                        data_mask_w = cv2.inRange(hsv_converted_matrix, self.lower_tier_w, self.upper_tier_w)
                         
-                        contours_g, _ = cv2.findContours(mask_grad, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                        contours_w, _ = cv2.findContours(mask_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        extracted_contours_g, _ = cv2.findContours(data_mask_g, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        extracted_contours_w, _ = cv2.findContours(data_mask_w, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                         
-                        valid_bar_found = False
-                        grad_h, white_h = 0, 0
-                        rescue_mode = False
-                        white_rescue_mode = False
+                        packet_stream_valid = False
+                        current_g_h, current_w_h = 0, 0
+                        forced_fallback_active = False
+                        floor_override_active = False
 
-                        if contours_w:
-                            contours_w = sorted(contours_w, key=cv2.contourArea, reverse=True)
-                            for cw in contours_w:
-                                if cv2.contourArea(cw) >= 2: 
-                                    x_tmp, y_tmp, w_tmp, h_tmp = cv2.boundingRect(cw)
-                                    w_min = max(1, int(2 * self.scale_x))
-                                    w_max = int(25 * self.scale_x)
+                        if extracted_contours_w:
+                            extracted_contours_w = sorted(extracted_contours_w, key=cv2.contourArea, reverse=True)
+                            for segment_w in extracted_contours_w:
+                                if cv2.contourArea(segment_w) >= 2: 
+                                    x_t, y_t, w_t, h_t = cv2.boundingRect(segment_w)
+                                    computed_w_min = max(1, int(2 * self.scale_factor_x))
+                                    computed_w_max = int(25 * self.scale_factor_x)
                                     
-                                    if h_tmp >= int(5 * self.scale_y) and w_min <= w_tmp <= w_max and h_tmp >= (w_tmp * 1.2):
-                                        if self.bar_ever_found and h_tmp < (self.prev_white_h - int(80 * self.scale_y)):
+                                    if h_t >= int(5 * self.scale_factor_y) and computed_w_min <= w_t <= computed_w_max and h_t >= (w_t * 1.2):
+                                        if self.stream_ever_validated and h_t < (self.history_w_h - int(80 * self.scale_factor_y)):
                                             continue
-                                        white_h = h_tmp
-                                        valid_bar_found = True  
-                                        self.bar_ever_found = True 
-                                        self.last_seen_time = time.time()
-                                        if white_h > self.max_white_h: self.max_white_h = white_h
+                                        current_w_h = h_t
+                                        packet_stream_valid = True  
+                                        self.stream_ever_validated = True 
+                                        self.last_frame_verification_time = time.time()
+                                        if current_w_h > self.peak_buffer_w_h: self.peak_buffer_w_h = current_w_h
                                         break 
 
-                        green_found_this_frame = False
-                        if valid_bar_found and contours_g:
-                            contours_g = sorted(contours_g, key=cv2.contourArea, reverse=True)
-                            for cg in contours_g:
-                                if cv2.contourArea(cg) >= 2: 
-                                    xg, yg, wg, hg = cv2.boundingRect(cg)
-                                    grad_h = hg
-                                    green_found_this_frame = True
-                                    if grad_h > self.max_grad_h: 
-                                        self.max_grad_h = grad_h
+                        matrix_g_valid_this_tick = False
+                        if packet_stream_valid and extracted_contours_g:
+                            extracted_contours_g = sorted(extracted_contours_g, key=cv2.contourArea, reverse=True)
+                            for segment_g in extracted_contours_g:
+                                if cv2.contourArea(segment_g) >= 2: 
+                                    _, _, _, hg = cv2.boundingRect(segment_g)
+                                    current_g_h = hg
+                                    matrix_g_valid_this_tick = True
+                                    if current_g_h > self.peak_buffer_g_h: 
+                                        self.peak_buffer_g_h = current_g_h
                                     break
 
-                        if valid_bar_found and not green_found_this_frame:
-                            if self.prev_grad_h > 0:
-                                grad_h = self.prev_grad_h 
+                        if packet_stream_valid and not matrix_g_valid_this_tick:
+                            if self.history_g_h > 0:
+                                current_g_h = self.history_g_h 
                             else:
-                                self.is_cooling_down = True
+                                self.state_cooldown_active = True
 
-                        if valid_bar_found:
-                            selisih = grad_h - white_h
-                            self.delta_selisih = selisih - self.prev_selisih
-                            delta_white = white_h - self.prev_white_h 
+                        if packet_stream_valid:
+                            current_discrepancy = current_g_h - current_w_h
+                            self.incremental_variance = current_discrepancy - self.history_variance
+                            delta_w_height = current_w_h - self.history_w_h 
 
-                            self.prev_grad_h = grad_h
-                            self.prev_white_h = white_h
-                            self.prev_selisih = selisih
+                            self.history_g_h = current_g_h
+                            self.history_w_h = current_w_h
+                            self.history_variance = current_discrepancy
 
-                            max_safe_selisih = self.MAX_GREEN - white_h - self.SAFETY_BUFFER
-                            BAND_HIGH = max(int(10 * self.scale_y), min(self.MAX_BAND_HIGH, max_safe_selisih))
+                            available_safe_margin = self.LIMIT_G - current_w_h - self.BUFFER_S
+                            BAND_HIGH = max(int(10 * self.scale_factor_y), min(self.HIGH_BAND_LIMIT, available_safe_margin))
                             
-                            if white_h < int(30 * self.scale_y):
-                                current_swing = int(80 * self.scale_y) 
-                                BAND_HIGH = max(BAND_HIGH, int(80 * self.scale_y)) 
-                            elif white_h < int(100 * self.scale_y):
-                                current_swing = int(100 * self.scale_y) 
-                                BAND_HIGH = max(BAND_HIGH, int(100 * self.scale_y))
-                            elif white_h > (self.SUCCESS_THRESHOLD - int(40 * self.scale_y)):
-                                current_swing = int(50 * self.scale_y) 
+                            if current_w_h < int(30 * self.scale_factor_y):
+                                dynamically_computed_swing = int(80 * self.scale_factor_y) 
+                                BAND_HIGH = max(BAND_HIGH, int(80 * self.scale_factor_y)) 
+                            elif current_w_h < int(100 * self.scale_factor_y):
+                                dynamically_computed_swing = int(100 * self.scale_factor_y) 
+                                BAND_HIGH = max(BAND_HIGH, int(100 * self.scale_factor_y))
+                            elif current_w_h > (self.VAL_THRESHOLD - int(40 * self.scale_factor_y)):
+                                dynamically_computed_swing = int(50 * self.scale_factor_y) 
                             else:
-                                current_swing = self.MIN_SWING
+                                dynamically_computed_swing = self.SWING_MIN_BOUND
 
-                            if white_h < self.TIGHT_GRIP_THRESHOLD:
-                                current_swing = min(current_swing, self.TIGHT_GRIP_SWING) 
+                            if current_w_h < self.CRIT_GRIP_LIMIT:
+                                dynamically_computed_swing = min(dynamically_computed_swing, self.CRIT_GRIP_SWING) 
 
-                            BAND_LOW = BAND_HIGH - current_swing
+                            BAND_LOW = BAND_HIGH - dynamically_computed_swing
                             
-                            if white_h > (self.SUCCESS_THRESHOLD - int(40 * self.scale_y)):
-                                BAND_LOW = max(BAND_LOW, -int(170 * self.scale_y)) 
+                            if current_w_h > (self.VAL_THRESHOLD - int(40 * self.scale_factor_y)):
+                                BAND_LOW = max(BAND_LOW, -int(170 * self.scale_factor_y)) 
                             else:
-                                BAND_LOW = max(BAND_LOW, -int(60 * self.scale_y))
+                                BAND_LOW = max(BAND_LOW, -int(60 * self.scale_factor_y))
 
-                            min_green_floor = int(45 * self.scale_y)
-                            if (white_h + BAND_LOW) < min_green_floor:
-                                BAND_LOW = min_green_floor - white_h
+                            computed_floor = int(45 * self.scale_factor_y)
+                            if (current_w_h + BAND_LOW) < computed_floor:
+                                BAND_LOW = computed_floor - current_w_h
 
                             BAND_HIGH = int(BAND_HIGH * random.uniform(0.98, 1.02))
                             BAND_LOW  = int(BAND_LOW  * random.uniform(0.98, 1.02))
 
-                            delta_clamp = max(int(-15 * self.scale_y), min(int(15 * self.scale_y), self.delta_selisih))
-                            effective_band_high = max(BAND_LOW + int(10 * self.scale_y), BAND_HIGH - max(0, delta_clamp))
-                            effective_band_low  = BAND_LOW + min(0, delta_clamp)
+                            clamped_variance = max(int(-15 * self.scale_factor_y), min(int(15 * self.scale_factor_y), self.incremental_variance))
+                            effective_band_high = max(BAND_LOW + int(10 * self.scale_factor_y), BAND_HIGH - max(0, clamped_variance))
+                            effective_band_low  = BAND_LOW + min(0, clamped_variance)
                                  
-                            if self.is_cooling_down:
-                                if selisih <= effective_band_low: self.is_cooling_down = False
+                            if self.state_cooldown_active:
+                                if current_discrepancy <= effective_band_low: self.state_cooldown_active = False
                             else:
-                                if selisih >= effective_band_high: self.is_cooling_down = True
+                                if current_discrepancy >= effective_band_high: self.state_cooldown_active = True
 
-                            # Rescue Bawah
-                            if 0 < white_h < int(35 * self.scale_y):
-                                if grad_h < (self.MAX_GREEN - int(25 * self.scale_y)):
-                                    self.is_cooling_down = False
-                                    white_rescue_mode = True
-                                    self.hold_stall_counter = 0
+                            # Sub-Floor Safe System
+                            if 0 < current_w_h < int(35 * self.scale_factor_y):
+                                if current_g_h < (self.LIMIT_G - int(25 * self.scale_factor_y)):
+                                    self.state_cooldown_active = False
+                                    floor_override_active = True
+                                    self.stagnant_frame_accumulation = 0
 
-                            # Rescue Atas
-                            GREEN_RESCUE_ENTER = self.MAX_GREEN - int(5  * self.scale_y)
-                            GREEN_RESCUE_EXIT  = self.MAX_GREEN - int(135 * self.scale_y) 
+                            # Roof Limit Safeguard
+                            CEILING_ALERT_ENTER = self.LIMIT_G - int(5  * self.scale_factor_y)
+                            CEILING_ALERT_EXIT  = self.LIMIT_G - int(135 * self.scale_factor_y) 
                             
-                            if grad_h >= GREEN_RESCUE_ENTER: self.in_rescue_mode = True
-                            elif grad_h <= GREEN_RESCUE_EXIT: self.in_rescue_mode = False
+                            if current_g_h >= CEILING_ALERT_ENTER: self.recovery_bypass_active = True
+                            elif current_g_h <= CEILING_ALERT_EXIT: self.recovery_bypass_active = False
 
-                            if self.in_rescue_mode:
-                                self.is_cooling_down = True
-                                rescue_mode = True
-                                white_rescue_mode = False
-                                self.hold_stall_counter = 0
+                            if self.recovery_bypass_active:
+                                self.state_cooldown_active = True
+                                forced_fallback_active = True
+                                floor_override_active = False
+                                self.stagnant_frame_accumulation = 0
 
-                            # TOP-END CRITICAL BRAKE SYSTEM 
-                            if white_h >= int(370 * self.scale_y):
-                                if selisih >= int(5 * self.scale_y) or grad_h >= int(350 * self.scale_y):
-                                    self.is_cooling_down = True
-                                    rescue_mode = True
+                            # TOP-END CRITICAL BRAKE SYSTEM (Strict Buffer Prevention)
+                            if current_w_h >= int(370 * self.scale_factor_y):
+                                if current_discrepancy >= int(5 * self.scale_factor_y) or current_g_h >= int(350 * self.scale_factor_y):
+                                    self.state_cooldown_active = True
+                                    forced_fallback_active = True
 
-                            # --- [KUNCI BARU] SMART STALL DETECTION BERBASIS CONFIG ---
-                            if not self.is_cooling_down and not white_rescue_mode:
-                                if self.delta_selisih <= 1 and delta_white <= 1: 
-                                    self.hold_stall_counter += 1
+                            # Static Stream Freeze Prevention Logic (Stall Check)
+                            if not self.state_cooldown_active and not floor_override_active:
+                                if self.incremental_variance <= 1 and delta_w_height <= 1: 
+                                    self.stagnant_frame_accumulation += 1
                                 else: 
-                                    self.hold_stall_counter = 0
+                                    self.stagnant_frame_accumulation = 0
                                     
-                                # Menggunakan nilai dinamis self.config_stall_frames dari config.ini
-                                if self.hold_stall_counter >= self.config_stall_frames:
-                                    self.is_cooling_down = True
-                                    self.hold_stall_counter = 0
+                                if self.stagnant_frame_accumulation >= self.config_stall_frames:
+                                    self.state_cooldown_active = True
+                                    self.stagnant_frame_accumulation = 0
                             else:
-                                self.hold_stall_counter = 0
+                                self.stagnant_frame_accumulation = 0
 
-                            if self.is_cooling_down:
-                                self.io.safe_mouse_up()
-                                action_text = "RELEASE KEY" if not rescue_mode else "RESCUE RELEASE PAKSA"
+                            if self.state_cooldown_active:
+                                self.handler.trigger_up_event()
+                                process_text = "TRANSMITTING CONTROL RELEASE" if not forced_fallback_active else "CRITICAL BRAKE OVERRIDE EMITTED"
                             else:
-                                self.io.safe_mouse_down()
-                                action_text = "HOLD KEY" if not white_rescue_mode else "RESCUE HOLD PAKSA"
+                                self.handler.trigger_down_event()
+                                process_text = "TRANSMITTING CONTROL HOLD" if not floor_override_active else "CRITICAL FLOOR ACCELERATION EMITTED"
 
-                        if not valid_bar_found:
-                            time_lost = time.time() - self.last_seen_time
-                            time_in_phase3 = time.time() - self.phase3_start_time
+                        if not packet_stream_valid:
+                            verification_loss_duration = time.time() - self.last_frame_verification_time
+                            pipeline_active_duration = time.time() - self.phase3_start_time
                             
-                            if time_in_phase3 < 2.0 and self.max_white_h < int(10 * self.scale_y):
-                                self.io.safe_mouse_down()
-                                action_text = "INITIAL PULL..."
-                            elif self.bar_ever_found and time_lost < 0.6:
-                                self.io.safe_mouse_up() 
-                                self.is_cooling_down = True 
-                                action_text = "FLICKER RECOVERY..."
+                            if pipeline_active_duration < 2.0 and self.peak_buffer_w_h < int(10 * self.scale_factor_y):
+                                self.handler.trigger_down_event()
+                                process_text = "INITIAL CHANNEL INTEGRATION STAGE..."
+                            elif self.stream_ever_validated and verification_loss_duration < 0.6:
+                                self.handler.trigger_up_event() 
+                                self.state_cooldown_active = True 
+                                process_text = "FRAME FLICKER INTERPOLATION STAGE..."
                             else:
-                                self.io.safe_mouse_up()
-                                print(f"\n>>> UI Hilang.")
-                                print(f"    HASIL: Max White: {self.max_white_h}px | Max Green: {self.max_grad_h}px | Target: >{self.SUCCESS_THRESHOLD}px")
+                                self.handler.trigger_up_event()
+                                print(f"\n>>> Visual stream carrier lost. Processing termination analysis metrics...")
+                                print(f"    METRICS: Peak Width height: {self.peak_buffer_w_h}px | Peak Target height: {self.peak_buffer_g_h}px | Threshold Target: >{self.VAL_THRESHOLD}px")
                                 
-                                if self.max_white_h >= self.SUCCESS_THRESHOLD: 
-                                    print(f"    STATUS: SUKSES\n")
-                                    self.perform_auto_collect()
+                                if self.peak_buffer_w_h >= self.VAL_THRESHOLD: 
+                                    print(f"    STATUS REPORT: STREAM CYCLE TERMINATED SUCCESSFULLY (VALID PACKET)\n")
+                                    self.dispatch_payload_collection()
                                     
-                                    if self.afk_mode_enabled and (time.time() - self.last_afk_time) >= (self.afk_interval * 60):
-                                        print(f">>> Memberikan jeda aman sebelum rutinitas AFK...")
-                                        if self.interruptible_sleep(self.cast_delay): continue
-                                        self.perform_afk_routine()
-                                        self.last_afk_time = time.time()
+                                    if self.routine_switch_active and (time.time() - self.last_routine_execution_timestamp) >= (self.routine_delay_interval * 60):
+                                        print(f">>> Processing macro schedule buffer interval before executing loop stabilization tools...")
+                                        # Added high-variance fuzzing to cycle wait times
+                                        fuzzed_sleep = self.allocation_sleep_delay + random.uniform(0.15, 0.65)
+                                        if self.secure_sleep_interceptor(fuzzed_sleep): continue
+                                        self.execute_maintenance_sequence()
+                                        self.last_routine_execution_timestamp = time.time()
                                 else:
-                                    print(f"    STATUS: GAGAL / PUTUS\n")
+                                    print(f"    STATUS REPORT: STREAM BREAKPOINT UNEXPECTED (PACKET DROP / DISCONNECT)\n")
                                     
-                                print(f">>> Siklus Selesai. Melempar pancingan baru dalam {self.cast_delay} detik...")
-                                if self.interruptible_sleep(self.cast_delay): continue 
+                                fuzzed_reconnect_delay = self.allocation_sleep_delay + random.uniform(0.18, 0.72)
+                                print(f">>> Connection matrix unlinked. Re-establishing pipeline session in {fuzzed_reconnect_delay:.2f} seconds...")
+                                if self.secure_sleep_interceptor(fuzzed_reconnect_delay): continue 
                                     
-                                self.io.tap_key_scancode(0x04) 
-                                self.state = "FASE_1_WAITING" 
-                                self.reset_minigame_state()
-                                self.fase1_start_time = time.time() 
-                                if self.interruptible_sleep(1.0): continue
+                                self.handler.dispatch_tap(0x04) 
+                                self.current_node_state = "NODE_1_SCANNING" 
+                                self.purge_pipeline_buffers()
+                                self.awaiting_node_start_time = time.time() 
+                                if self.secure_sleep_interceptor(1.0 + random.uniform(0.02, 0.11)): continue
 
-                except Exception as inner_e:
+                except Exception as inner_error:
                     pass
 
-                if self.is_debug_mode:
-                    self.log_to_cmd(action_text)
+                if self.verbosity_log_active:
+                    self.print_pipeline_statistics(process_text)
 
         except KeyboardInterrupt:
-            print("\n[!] Dihentikan secara paksa oleh user (Ctrl + C). Membersihkan resource...")
+            print("\n[!] Force close signal intercepted (Ctrl + C). Disposing active window hooks...")
         except Exception as e:
-            print(f"\n[!] Fatal Error: {e}")
+            print(f"\n[!] Critical Runtime Failure: {e}")
         finally:
-            self.io.safe_mouse_up()
-            self.camera.stop()
+            self.handler.trigger_up_event()
+            self.dx_capture_session.stop()
             os._exit(0)
 
 if __name__ == "__main__":
-    bot = FishingBot()
+    bot = DataStreamPipeline()
     bot.run()
