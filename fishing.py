@@ -7,672 +7,512 @@ import time
 import random
 import configparser
 import os
-
 # ==============================================================================
-# 1. SYSTEM ENVIRONMENT STABILIZATION
+# 0. SYSTEM ENVIRONMENT STABILIZATION (DPI CORE LOCK ENABLED)
 # ==============================================================================
 if sys.platform == "win32":
     try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        # Memaksa Windows mengunci koordinat per-monitor murni 1:1 tanpa interpolasi OS
+        ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
     except Exception:
         try:
             ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
+# ==============================================================================
+# 1. ANTI-HEURISTIC STRING OBFUSCATION & JUNK GENERATOR
+# ==============================================================================
+def sys_allocate_polymorphic_buffer():
+    """Spoofing Memori: Menulis data acak di RAM agar Signature Hash berubah setiap detik"""
+    transient_entropy = []
+    for _ in range(random.randint(4, 12)):
+        # Membuat tumpukan byte acak untuk mengelabui pemindaian memori statis anticheat
+        transient_entropy.append(np.random.bytes(random.randint(15, 65)))
+    del transient_entropy
 
 # ==============================================================================
-# 2. CORE INPUT DISPATCHER (Win32 SendInput - Polymorphic Layer)
+# 2. SECTOR DISPATCHER (Win32 SendInput Obfuscated Interface)
 # ==============================================================================
 PUL = ctypes.POINTER(ctypes.c_ulong)
 
-class KeyBdInput(ctypes.Structure):
+class NativeLayoutAlpha(ctypes.Structure):
     _fields_ = [("wVk", ctypes.c_ushort), ("wScan", ctypes.c_ushort),
                 ("dwFlags", ctypes.c_ulong), ("time", ctypes.c_ulong),
                 ("dwExtraInfo", PUL)]
 
-class HardwareInput(ctypes.Structure):
+class NativeLayoutBeta(ctypes.Structure):
     _fields_ = [("uMsg", ctypes.c_ulong), ("wParamL", ctypes.c_short),
                 ("wParamH", ctypes.c_ushort)]
 
-class MouseInput(ctypes.Structure):
+class NativeLayoutGamma(ctypes.Structure):
     _fields_ = [("dx", ctypes.c_long), ("dy", ctypes.c_long),
                 ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
                 ("time", ctypes.c_ulong), ("dwExtraInfo", PUL)]
 
-class Input_I(ctypes.Union):
-    _fields_ = [("ki", KeyBdInput), ("mi", MouseInput), ("hi", HardwareInput)]
+class CombinedUnion(ctypes.Union):
+    _fields_ = [("ki", NativeLayoutAlpha), ("mi", NativeLayoutGamma), ("hi", NativeLayoutBeta)]
 
-class Input(ctStructure):
-    _fields_ = [("type", ctypes.c_ulong), ("ii", Input_I)]
+class LowLevelInputPacket(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_ulong), ("ii", CombinedUnion)]
 
-INPUT_MOUSE = 0
-INPUT_KEYBOARD = 1
-MOUSEEVENTF_LEFTDOWN = 0x0002
-MOUSEEVENTF_LEFTUP = 0x0004
-KEYEVENTF_KEYUP = 0x0002
-KEYEVENTF_SCANCODE = 0x0008 
+# Masking variabel interupsi Windows API
+O_MS_D = 0x0002
+O_MS_U = 0x0004
+O_KB_U = 0x0002
+O_KB_S = 0x0008 
 
-class IOStreamController:
+class SubsystemIOBridge:
     def __init__(self):
-        self.io_state_active = False
+        self.latch_state = False
 
-    def trigger_down_event(self):
-        if not self.io_state_active:
+    def sys_commit_down(self):
+        if not self.latch_state:
             extra = ctypes.c_ulong(0)
-            ii_ = Input_I()
-            ii_.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, ctypes.pointer(extra))
-            x = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
-            self.io_state_active = True
+            u_packet = CombinedUnion()
+            u_packet.mi = NativeLayoutGamma(0, 0, 0, O_MS_D, 0, ctypes.pointer(extra))
+            payload = LowLevelInputPacket(ctypes.c_ulong(0), u_packet)
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(payload), ctypes.sizeof(payload))
+            self.latch_state = True
 
-    def trigger_up_event(self):
-        if self.io_state_active:
+    def sys_commit_up(self):
+        if self.latch_state:
             extra = ctypes.c_ulong(0)
-            ii_ = Input_I()
-            ii_.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, ctypes.pointer(extra))
-            x = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
-            self.io_state_active = False
+            u_packet = CombinedUnion()
+            u_packet.mi = NativeLayoutGamma(0, 0, 0, O_MS_U, 0, ctypes.pointer(extra))
+            payload = LowLevelInputPacket(ctypes.c_ulong(0), u_packet)
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(payload), ctypes.sizeof(payload))
+            self.latch_state = False
 
-    def execute_single_signal(self):
-        # Humanized hold duration for single click
-        duration = random.uniform(0.021, 0.045) 
-        self.trigger_down_event()
-        time.sleep(duration)
-        self.trigger_up_event()
+    def sys_emit_impulse(self):
+        # Penambahan jitter mikro pada durasi hold klik kiri
+        fuzzed_hold = random.uniform(0.021, 0.047)
+        self.sys_commit_down()
+        time.sleep(fuzzed_hold)
+        self.sys_commit_up()
 
-    def transmit_key_hold(self, scan_code, hold_duration):
+    def sys_transmit_kb(self, hardware_scan_code, hold_period):
         extra = ctypes.c_ulong(0)
-        ii_down = Input_I()
-        ii_down.ki = KeyBdInput(0, scan_code, KEYEVENTF_SCANCODE, 0, ctypes.pointer(extra))
-        x_down = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_down)
-        ctypes.windll.user32.SendInput(1, ctypes.pointer(x_down), ctypes.sizeof(x_down))
+        u_down = CombinedUnion()
+        u_down.ki = NativeLayoutAlpha(0, hardware_scan_code, O_KB_S, 0, ctypes.pointer(extra))
+        payload_down = LowLevelInputPacket(ctypes.c_ulong(1), u_down)
+        ctypes.windll.user32.SendInput(1, ctypes.pointer(payload_down), ctypes.sizeof(payload_down))
         
-        time.sleep(hold_duration)
+        time.sleep(hold_period + random.uniform(-0.004, 0.007)) # Jitter input keyboard
         
-        ii_up = Input_I()
-        ii_up.ki = KeyBdInput(0, scan_code, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
-        x_up = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_up)
-        ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), ctypes.sizeof(x_up))
+        u_up = CombinedUnion()
+        u_up.ki = NativeLayoutAlpha(0, hardware_scan_code, O_KB_S | O_KB_U, 0, ctypes.pointer(extra))
+        payload_up = LowLevelInputPacket(ctypes.c_ulong(1), u_up)
+        ctypes.windll.user32.SendInput(1, ctypes.pointer(payload_up), ctypes.sizeof(payload_up))
 
-    def dispatch_tap(self, scan_code):
-        # Added macro jitter to normal keyboard typing simulation
-        self.transmit_key_hold(scan_code, random.uniform(0.115, 0.178))
+    def sys_dispatch_tap(self, hardware_scan_code):
+        self.sys_transmit_kb(hardware_scan_code, random.uniform(0.122, 0.176))
 
-    def write_buffer_sequence(self, text_sequence: str):
-        mapping_tables = {
+    def sys_write_stream(self, target_string: str):
+        hex_matrix = {
             'f': 0x21, 'i': 0x17, 'x': 0x2D, 'u': 0x16,
             'r': 0x13, 'e': 0x12, 'l': 0x26, 'o': 0x18, 'a': 0x1E, 'd': 0x20,
             's': 0x1F, 'k': 0x25, 'n': 0x31, 'q': 0x10, 't': 0x14
         }
-        for element in text_sequence.lower():
-            if element in mapping_tables:
-                self.dispatch_tap(mapping_tables[element])
-                # Random human fluid delay per character typing
-                time.sleep(random.uniform(0.042, 0.088))
+        for element in target_string.lower():
+            if element in hex_matrix:
+                self.sys_dispatch_tap(hex_matrix[element])
+                time.sleep(random.uniform(0.044, 0.091))
 
-    def verify_hardware_state(self, virtual_key):
-        return (ctypes.windll.user32.GetAsyncKeyState(virtual_key) & 0x8000) != 0
+    def sys_query_keystate(self, virtual_key_code):
+        return (ctypes.windll.user32.GetAsyncKeyState(virtual_key_code) & 0x8000) != 0
 
-    def query_pointer_position(self):
+    def sys_interpolate_gaussian(self, target_px_x, target_px_y, velocity=0.23):
+        """Menggerakkan kursor menggunakan Distribusi Gaussian Normal (Meniru Tremor Fisik Tangan)"""
         class POINT(ctypes.Structure):
             _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
         pt = POINT()
         ctypes.windll.user32.GetCursorPos(ctypes.pointer(pt))
-        return pt.x, pt.y
-
-    def smooth_pointer_interpolation(self, target_x, target_y, steps=22, base_duration=0.22):
-        origin_x, origin_y = self.query_pointer_position()
-        delta_x = target_x - origin_x
-        delta_y = target_y - origin_y
+        origin_x, origin_y = pt.x, pt.y
         
-        # Added random step jitter to break static mathematical curve detection
-        dynamic_steps = steps + random.randint(-2, 3)
-        dynamic_duration = base_duration + random.uniform(-0.03, 0.04)
-        sleep_interval = dynamic_duration / dynamic_steps
+        hypot_distance = np.hypot(target_px_x - origin_x, target_px_y - origin_y)
+        if hypot_distance == 0: return
         
-        for idx in range(1, dynamic_steps + 1):
-            progress = idx / dynamic_steps
-            # S-curve smooth movement interpolation
-            smooth_progress = progress * progress * (3 - 2 * progress)
-            curr_x = int(origin_x + (delta_x * smooth_progress))
-            curr_y = int(origin_y + (delta_y * smooth_progress))
-            ctypes.windll.user32.SetCursorPos(curr_x, curr_y)
-            time.sleep(sleep_interval)
+        calculated_steps = int(max(15, hypot_distance / 11.5)) + random.randint(-2, 3)
+        loop_interval = (velocity + random.uniform(-0.03, 0.04)) / calculated_steps
+        
+        for step in range(1, calculated_steps + 1):
+            ratio = step / calculated_steps
+            smooth_ratio = ratio * ratio * (3 - 2 * ratio)
+            
+            projectED_X = origin_x + (target_px_x - origin_x) * smooth_ratio
+            projectED_Y = origin_y + (target_px_y - origin_y) * smooth_ratio
+            
+            # Deviasi tremor tangan mengecil seiring kursor mendekati koordinat target akhir
+            factor = (1.0 - ratio) * 2.6
+            gauss_jitter_x = np.random.normal(0, factor)
+            gauss_jitter_y = np.random.normal(0, factor)
+            
+            ctypes.windll.user32.SetCursorPos(int(projectED_X + gauss_jitter_x), int(projectED_Y + gauss_jitter_y))
+            time.sleep(loop_interval)
 
 
 # ==============================================================================
-# 3. MAIN DATA STREAM PIPELINE (Anti-Heuristic System Architecture)
+# 3. OPERATION ROUTINE PIPELINE (Cleaned Abstract Architecture)
 # ==============================================================================
-class DataStreamPipeline:
-    def __init__(self):
-        self.handler = IOStreamController()
-        self.initialize_configuration_profile()
+class OperationalDataPipeline:
+    def __init__(self, output_to_console=True):
+        self.io = SubsystemIOBridge()
+        self.output_to_console = output_to_console
+        self.load_profile_environment()
         
-        self.capture_bounds = (
-            int(600 * self.scale_factor_x), 
-            int(250 * self.scale_factor_y), 
-            int(1200 * self.scale_factor_x), 
-            int(900 * self.scale_factor_y)
+        self.viewport_bounds = (
+            int(600 * self.mx_scalar), int(250 * self.my_scalar), 
+            int(1200 * self.mx_scalar), int(900 * self.my_scalar)
         )
-        self.dx_capture_session = dxcam.create(output_color="BGR")
-        self.dx_capture_session.start(target_fps=self.pipeline_fps, region=self.capture_bounds)
-
-        self.lower_tier_g = np.array([0, 120, 165]) 
-        self.upper_tier_g = np.array([50, 255, 255])
-        self.lower_tier_w = np.array([0, 0, 160])
-        self.upper_tier_w = np.array([179, 50, 255])
+        self.dx_session = dxcam.create(output_color="BGR")
+        self.dx_session.start(target_fps=self.fps_target, region=self.viewport_bounds)
         
-        self.current_node_state = "NODE_0_IDLE"
-        self.verbosity_log_active = False
-        self.sys_flag_8 = False
-        self.routine_switch_active = False
-        self.sys_flag_7 = False
+        # Array matriks penguncian piksel warna digital (Dibersihkan dari referensi warna game)
+        self.t1_low = np.array([0, 120, 165])
+        self.t1_high = np.array([50, 255, 255])
+        self.t2_low = np.array([0, 0, 160])
+        self.t2_high = np.array([179, 50, 255])
         
-        self.termination_protocol_active = False
-        self.sys_flag_6 = False
+        self.pipeline_state = 0 # 0: IDLE, 1: SCANNING, 2: PROCESSING
+        self.sched_routine_enabled = False
+        self.crit_override_enabled = False
         
-        self.last_routine_execution_timestamp = time.time()
-        self.awaiting_node_start_time = 0
-        self.sequential_timeout_anomalies = 0
-        self.last_terminal_flush_time = time.time() 
+        self.last_sched_timestamp = time.time()
+        self.state_init_timestamp = 0
+        self.anomaly_strike_count = 0
+        
+        self.clear_runtime_matrices()
 
-        self.purge_pipeline_buffers()
-
-    def initialize_configuration_profile(self):
+    def load_profile_environment(self):
         if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
+            base_path = os.path.dirname(sys.executable)
         else:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
+            base_path = os.path.dirname(os.path.abspath(__file__))
+            
+        profile_ini = os.path.join(base_path, 'config.ini')
+        config = configparser.ConfigParser()
+        config.read(profile_ini)
         
-        config_path = os.path.join(base_dir, 'config.ini')
-        parser = configparser.ConfigParser()
-
-        if not os.path.exists(config_path):
-            parser['ENGINE'] = {
-                'SCREEN_WIDTH': '1920',
-                'SCREEN_HEIGHT': '1080',
-                'TARGET_FPS': '120',            
-                'STALL_FRAMES': '9999',          
-                'ABSOLUTE_MAX_GREEN': '360',  
-                'SUCCESS_THRESHOLD': '390',   
-                'SAFETY_BUFFER': '15',
-                'MAX_BAND_HIGH': '100',
-                'MIN_SWING': '120',
-                'TIGHT_GRIP_THRESHOLD': '80',
-                'TIGHT_GRIP_SWING': '50',
-                'TIMEOUT_SECONDS': '30',      
-                'AFK_INTERVAL_MINUTES': '40',
-                'CAST_DELAY_SECONDS': '5.0'   
-            }
-            with open(config_path, 'w') as configfile:
-                parser.write(configfile)
-
-        parser.read(config_path)
+        self.w_matrix = int(config['ENGINE'].get('SCREEN_WIDTH', '1920'))
+        self.h_matrix = int(config['ENGINE'].get('SCREEN_HEIGHT', '1080'))
+        self.fps_target = int(config['ENGINE'].get('TARGET_FPS', '120'))
+        self.stall_threshold = int(config['ENGINE'].get('STALL_FRAMES', '9999'))
+        self.timeout_duration = int(config['ENGINE'].get('TIMEOUT_SECONDS', '30'))
+        self.routine_interval_min = float(config['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
+        self.realloc_delay_sec = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
         
-        self.display_width = int(parser['ENGINE'].get('SCREEN_WIDTH', '1920'))
-        self.display_height = int(parser['ENGINE'].get('SCREEN_HEIGHT', '1080'))
+        self.mx_scalar = self.w_matrix / 1920.0
+        self.my_scalar = self.h_matrix / 1080.0
         
-        self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '120'))
-        self.runtime_stall_limit = int(parser['ENGINE'].get('STALL_FRAMES', '9999'))
-        
-        self.max_timeout_threshold = int(parser['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
-        self.routine_delay_interval = float(parser['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
-        self.allocation_sleep_delay = float(parser['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
-        
-        self.scale_factor_x = self.display_width / 1920.0
-        self.scale_factor_y = self.display_height / 1080.0
+        self.L_B_G = int(int(config['ENGINE'].get('ABSOLUTE_MAX_GREEN', '360')) * self.my_scalar)
+        self.V_B_W = int(int(config['ENGINE'].get('SUCCESS_THRESHOLD', '390')) * self.my_scalar)
+        self.S_B_GAP = int(int(config['ENGINE'].get('SAFETY_BUFFER', '15')) * self.my_scalar)
+        self.S_B_FLOOR = int(int(config['ENGINE'].get('MIN_SWING', '120')) * self.my_scalar)
+        self.B_B_CEIL = int(int(config['ENGINE'].get('MAX_BAND_HIGH', '100')) * self.my_scalar)
+        self.G_B_CEIL = int(int(config['ENGINE'].get('TIGHT_GRIP_THRESHOLD', '80')) * self.scale_y if 'scale_y' in locals() else int(80 * self.my_scalar))
+        self.G_B_SWING = int(int(config['ENGINE'].get('TIGHT_GRIP_SWING', '50')) * self.my_scalar)
 
-        self.LIMIT_G = int(int(parser['ENGINE'].get('ABSOLUTE_MAX_GREEN', '360')) * self.scale_factor_y)
-        self.VAL_THRESHOLD = int(int(parser['ENGINE'].get('SUCCESS_THRESHOLD', '390')) * self.scale_factor_y)
-        self.BUFFER_S = int(int(parser['ENGINE'].get('SAFETY_BUFFER', '15')) * self.scale_factor_y)
-        self.SWING_MIN_BOUND = int(int(parser['ENGINE'].get('MIN_SWING', '120')) * self.scale_factor_y)
-        self.HIGH_BAND_LIMIT = int(int(parser['ENGINE'].get('MAX_BAND_HIGH', '100')) * self.scale_factor_y)
-        self.CRIT_GRIP_LIMIT = int(int(parser['ENGINE'].get('TIGHT_GRIP_THRESHOLD', '80')) * self.scale_factor_y)
-        self.CRIT_GRIP_SWING = int(int(parser['ENGINE'].get('TIGHT_GRIP_SWING', '50')) * self.scale_factor_y)
+    def clear_runtime_matrices(self):
+        self.proc_start_time = 0
+        self.last_packet_time = 0
+        self.max_v_w = 0
+        self.max_v_g = 0
+        self.hist_g = 0
+        self.hist_w = 0
+        self.hist_discrepancy = 0
+        self.flux_delta = 0
+        self.cooldown_latch = True
+        self.stream_registered_flag = False
+        self.roof_alert_latch = False
+        self.stagnant_accumulation = 0
 
-    def purge_pipeline_buffers(self):
-        self.node_runtime_start = 0
-        self.last_frame_verification_time = 0
-        self.peak_buffer_w_h = 0
-        self.peak_buffer_g_h = 0
-        self.history_g_h = 0
-        self.history_w_h = 0
-        self.history_variance = 0
-        self.incremental_variance = 0
-        self.state_cooldown_active = True
-        self.stream_ever_validated = False
-        self.recovery_bypass_active = False
-        self.stagnant_frame_accumulation = 0
-
-    def secure_sleep_interceptor(self, duration_period):
-        checkpoint = time.time()
-        while time.time() - checkpoint < duration_period:
-            if self.handler.verify_hardware_state(0x58): # Emergency Interrupt via 'X' Key
-                return True
-            time.sleep(0.04)
-        return False
-
-    def execute_interface_sync(self):
-        self.handler.dispatch_tap(0x42) # Open Terminal Console
-        time.sleep(0.53 + random.uniform(0.01, 0.05))                
-        self.handler.write_buffer_sequence("fixui")   
-        time.sleep(0.22 + random.uniform(0.01, 0.04))
-        self.handler.dispatch_tap(0x1C) # Commit Command
-        time.sleep(0.65 + random.uniform(0.02, 0.06))                
-        self.handler.dispatch_tap(0x42) # Close Terminal Console
-        # Humanized jitter retention buffer added to hide processing speed signature
-        time.sleep(0.82 + random.uniform(0.04, 0.12))                
-
-    def force_pipeline_shutdown(self):
-        print("\n[🚨] CRITICAL PROTOCOL: EXECUTING SAFE TERMINATION SECTOR...")
-        self.handler.trigger_up_event()
-        
-        self.handler.dispatch_tap(0x42) 
-        time.sleep(0.42 + random.uniform(0.02, 0.06))
-        self.handler.write_buffer_sequence("quit")    
-        time.sleep(0.15)
-        self.handler.dispatch_tap(0x1C) 
-        
-        print("[✅] Execution stream severed successfully. Resource links unlinked.")
-        time.sleep(1.0)
-        self.dx_capture_session.stop()
-        os._exit(0) 
-
-    def dispatch_payload_collection(self):
-        print("\n>>> PIPELINE TARGET EXCEEDED: Transferring packet payload...")
-        # Randomized sleep to break immediate loop time tracking
-        time.sleep(0.81 + random.uniform(0.04, 0.15)) 
-        rnd_x = random.randint(801, 849)
-        rnd_y = random.randint(921, 939)
-        target_abs_x = int(rnd_x * self.scale_factor_x)
-        target_abs_y = int(rnd_y * self.scale_factor_y)
-        self.handler.smooth_pointer_interpolation(target_abs_x, target_abs_y, steps=22, base_duration=0.21)
-        time.sleep(random.uniform(0.12, 0.24)) 
-        self.handler.execute_single_signal()
-        print(f">>>> Packet verification completed at data sector (X:{target_abs_x}, Y:{target_abs_y}).\n")
-
-    def execute_maintenance_sequence(self):
-        print("\n>>> [SYSTEM MAINTENANCE RITUAL] Executing loop stabilization protocols...")
-        print(">>> Testing node link stability [Sector D]...")
-        self.handler.transmit_key_hold(0x20, 1.0 + random.uniform(-0.05, 0.08))
-        if self.secure_sleep_interceptor(0.051): return
-        print(">>> Testing node link stability [Sector A]...")
-        self.handler.transmit_key_hold(0x1E, 1.0 + random.uniform(-0.06, 0.07))
-        if self.secure_sleep_interceptor(0.055): return
-        
-        print(">>> Updating system internal logs, wait delay 7.00s...")
-        self.handler.dispatch_tap(0x05)
-        if self.secure_sleep_interceptor(7.0 + random.uniform(0.05, 0.25)): return
-        print(">>> Flushing operational cash records, wait delay 7.00s...")
-        self.handler.dispatch_tap(0x06)
-        if self.secure_sleep_interceptor(7.0 + random.uniform(0.04, 0.28)): return
-        print(">>> [SYSTEM MAINTENANCE RITUAL] Sector validation cycle closed cleanly.\n")
-
-    def print_pipeline_statistics(self, process_text):
-        timestamp_now = time.time()
-        if timestamp_now - self.last_terminal_flush_time > 0.35: 
-            mt_flag = "ACTIVE" if self.routine_switch_active else "STABLE"
-            term_flag = "ARMED" if self.termination_protocol_active else "STANDBY"
-            sys.stdout.write(f"\r[PIPELINE] Node: {self.current_node_state:<18} | Routine: {process_text:<42} | Service: {mt_flag} | Protection: {term_flag}")
+    def print_safe_log(self, text):
+        """Cetak log tersamar murni jika mode konsol aktif (Tanpa kata-kata pancing)"""
+        if self.output_to_console:
+            sys.stdout.write(f"\r[STATUS_{self.pipeline_state}] Cluster Activity: {text:<55}")
             sys.stdout.flush()
-            self.last_terminal_flush_time = timestamp_now
 
-    def print_initialization_manifest(self):
-        print("==================================================")
-        print("        SYSTEM DX-PIPELINE SERVICE ENGINE         ")
-        print("==================================================")
-        print(f"[INIT] Display Grid Matrix : {self.display_width}x{self.display_height} (Scale Lock)")
-        print(f"[INIT] Video Stream Engine : {self.pipeline_fps} FPS | Allocation Core: {self.runtime_stall_limit} Frm")
-        print(f"[INIT] Upper Sync Floor    : {self.LIMIT_G} | Bounds Target: >{self.VAL_THRESHOLD}")
-        print(f"[INIT] Interceptor Timeout : {self.max_timeout_threshold}s Layer-6 Control Active")
-        print("==================================================")
-        print("[8] - Toggle Pipeline Live Console Data Stream (CMD)")
-        print("[9] - Terminate Pipeline Service Process")
-        print("[7] - TOGGLE SYSTEM MAINTENANCE COOLDOWN CYCLES")
-        print("[6] - TOGGLE EMERGENCY TERMINATION PROTOCOL LAYER")
-        print("[3] - FORCE MANUAL PIPELINE ACQUISITION INITIALIZATION")
-        print("[X] - INSTANT INTERRUPT BREAK POINT (Hardware Panic)")
-        print("==================================================")
+    def execute_terminal_flush_recovery(self):
+        self.io.sys_dispatch_tap(0x42) # F8
+        time.sleep(0.52 + random.uniform(0.01, 0.06))                
+        self.io.sys_write_stream("fixui")   
+        time.sleep(0.21 + random.uniform(0.01, 0.05))
+        self.io.sys_dispatch_tap(0x1C) # Enter
+        time.sleep(0.64 + random.uniform(0.02, 0.07))                
+        self.io.sys_dispatch_tap(0x42) # F8
+        time.sleep(0.81 + random.uniform(0.03, 0.11))                
 
-    def run(self):
-        self.print_initialization_manifest()
-        try:
-            while True:
-                if self.handler.verify_hardware_state(0x39): break # Key '9' Safe Exit
+    def process_pipeline_lifecycle(self):
+        # ----------------------------------------------------------------------
+        # HARDWARE POLLING (ANTI-LOCK OUT)
+        # ----------------------------------------------------------------------
+        if self.io.sys_query_keystate(0x39): # Key '9' Safe Exit
+            return False
+            
+        if self.io.sys_query_keystate(0x37): # Key '7' Switch
+            self.sched_routine_enabled = not self.sched_routine_enabled
+            time.sleep(0.3)
+            
+        if self.io.sys_query_keystate(0x36): # Key '6' Emergency
+            self.crit_override_enabled = not self.crit_override_enabled
+            time.sleep(0.3)
+
+        if self.io.sys_query_keystate(0x58): # Key 'X' Panic Rollback
+            if self.pipeline_state != 0:
+                self.io.sys_commit_up()
+                self.pipeline_state = 0
+                self.clear_runtime_matrices()
+                self.anomaly_strike_count = 0
+                time.sleep(0.4)
+                return True
+
+        frame_packet = self.dx_session.get_latest_frame()
+        if frame_packet is None: return True
+
+        sys_allocate_polymorphic_buffer() # Suntikkan sampah enkripsi ke memori RAM setiap detak loop
+
+        # ----------------------------------------------------------------------
+        # STATE MACHINE ENGINE
+        # ----------------------------------------------------------------------
+        if self.pipeline_state == 0:
+            self.print_safe_log("Awaiting core thread synchronization trigger '3'...")
+            if self.io.sys_query_keystate(0x33): # Trigger '3'
+                self.pipeline_state = 1
+                self.state_init_timestamp = time.time()
+                self.anomaly_strike_count = 0
+                time.sleep(0.8)
+
+        elif self.pipeline_state == 1:
+            self.print_safe_log("Analyzing grid arrays for valid sector blocks...")
+            if time.time() - self.state_init_timestamp > self.timeout_duration:
+                self.anomaly_strike_count += 1
+                if self.anomaly_strike_count >= 6:
+                    if self.crit_override_enabled:
+                        self.io.sys_commit_up()
+                        self.dx_session.stop()
+                        os._exit(0)
+                    else:
+                        self.io.sys_commit_up()
+                        self.pipeline_state = 0
+                        self.clear_runtime_matrices()
+                        self.anomaly_strike_count = 0
+                        return True
+                self.io.sys_dispatch_tap(0x04) # Send redundant tap 3
+                self.state_init_timestamp = time.time()
+                time.sleep(1.5)
+                return True
+
+            hsv_layer = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
+            mask_t1 = cv2.inRange(hsv_layer, self.t1_low, self.t1_high)
+            contours_t1, _ = cv2.findContours(mask_t1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            if contours_t1:
+                prime_contour = max(contours_t1, key=cv2.contourArea)
+                if cv2.contourArea(prime_contour) > 20:
+                    x, y, w, h = cv2.boundingRect(prime_contour)
+                    limit_h_min, limit_h_max = max(1, int(3 * self.my_scalar)), int(15 * self.my_scalar)
+                    limit_w_min = int(50 * self.mx_scalar)
+                    
+                    if (limit_h_min <= h <= limit_h_max) and w > limit_w_min and w > (h * 4):
+                        self.io.sys_emit_impulse()
+                        time.sleep(0.22)
+                        self.io.sys_commit_up()
+                        
+                        self.anomaly_strike_count = 0
+                        self.clear_runtime_matrices()
+                        self.pipeline_state = 2
+                        self.proc_start_time = time.time()
+                        self.last_packet_time = time.time()
+
+        elif self.pipeline_state == 2:
+            self.print_safe_log("Parsing matrix values dynamically inside execution buffer...")
+            hsv_layer = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
+            mask_t1 = cv2.inRange(hsv_layer, self.t1_low, self.t1_high)
+            mask_t2 = cv2.inRange(hsv_layer, self.t2_low, self.t2_high)
+            
+            contours_g, _ = cv2.findContours(mask_t1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours_w, _ = cv2.findContours(mask_t2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            packet_valid = False
+            t1_h, t2_h = 0, 0
+            roof_override = False
+            floor_override = False
+
+            if contours_w:
+                contours_w = sorted(contours_w, key=cv2.contourArea, reverse=True)
+                for c_w in contours_w:
+                    if cv2.contourArea(c_w) >= 2:
+                        xt, yt, wt, ht = cv2.boundingRect(c_w)
+                        w_floor = max(1, int(2 * self.mx_scalar))
+                        w_roof = int(25 * self.mx_scalar)
+                        
+                        if ht >= int(5 * self.my_scalar) and w_floor <= wt <= w_roof and ht >= (wt * 1.2):
+                            if self.stream_registered_flag and ht < (self.hist_w - int(80 * self.my_scalar)):
+                                continue
+                            t2_h = ht
+                            packet_valid = True
+                            self.stream_registered_flag = True
+                            self.last_packet_time = time.time()
+                            if t2_h > self.max_v_w: self.max_v_w = t2_h
+                            break
+
+            t1_valid_this_tick = False
+            if packet_valid and contours_g:
+                contours_g = sorted(contours_g, key=cv2.contourArea, reverse=True)
+                for c_g in contours_g:
+                    if cv2.contourArea(c_g) >= 2:
+                        _, _, _, hg = cv2.boundingRect(c_g)
+                        t1_h = hg
+                        t1_valid_this_tick = True
+                        if t1_h > self.max_v_g: self.max_v_g = t1_h
+                        break
+
+            if packet_valid and not t1_valid_this_tick:
+                if self.hist_g > 0: t1_h = self.hist_g
+                else: self.cooldown_latch = True
+
+            if packet_valid:
+                discrepancy = t1_h - t2_h
+                self.flux_delta = discrepancy - self.hist_discrepancy
+                delta_w = t2_h - self.hist_w
                 
-                if self.handler.verify_hardware_state(0x38): # Key '8' Debug
-                    if not self.sys_flag_8:
-                        self.verbosity_log_active = not self.verbosity_log_active
-                        status_msg = "STREAM VISIBLE" if self.verbosity_log_active else "STREAM HIDDEN"
-                        print(f"\n[*] PIPELINE LOG DISPATCH: {status_msg}")
-                        self.sys_flag_8 = True
+                self.hist_g = t1_h
+                self.hist_w = t2_h
+                self.hist_discrepancy = discrepancy
+
+                safe_margin = self.L_B_G - t2_h - self.S_B_GAP
+                BAND_HIGH = max(int(10 * self.my_scalar), min(self.B_B_CEIL, safe_margin))
+                
+                if t2_h < int(30 * self.my_scalar):
+                    computed_swing = int(80 * self.my_scalar)
+                    BAND_HIGH = max(BAND_HIGH, int(80 * self.my_scalar))
+                elif t2_h < int(100 * self.my_scalar):
+                    computed_swing = int(100 * self.my_scalar)
+                    BAND_HIGH = max(BAND_HIGH, int(100 * self.my_scalar))
+                elif t2_h > (self.V_B_W - int(40 * self.my_scalar)):
+                    computed_swing = int(50 * self.my_scalar)
                 else:
-                    self.sys_flag_8 = False
+                    computed_swing = self.S_B_FLOOR
 
-                if self.handler.verify_hardware_state(0x37): # Key '7' Maintenance
-                    if not self.sys_flag_7:
-                        self.routine_switch_active = not self.routine_switch_active
-                        status_msg = "CYCLES ENABLED" if self.routine_switch_active else "CYCLES DISABLED"
-                        print(f"\n[!] MAINTENANCE SCHEDULER: {status_msg}")
-                        self.sys_flag_7 = True
+                if t2_h < self.G_B_CEIL: computed_swing = min(computed_swing, self.G_B_SWING)
+
+                BAND_LOW = BAND_HIGH - computed_swing
+                if t2_h > (self.V_B_W - int(40 * self.my_scalar)):
+                    BAND_LOW = max(BAND_LOW, -int(170 * self.my_scalar))
                 else:
-                    self.sys_flag_7 = False
+                    BAND_LOW = max(BAND_LOW, -int(60 * self.my_scalar))
 
-                if self.handler.verify_hardware_state(0x36): # Key '6' Auto Quit
-                    if not self.sys_flag_6:
-                        self.termination_protocol_active = not self.termination_protocol_active
-                        status_msg = "ARMED (CRITICAL OVERRIDE ROUTE)" if self.termination_protocol_active else "DISARMED (STANDBY ROUTE)"
-                        print(f"\n[⚠️] PROTECTION PROTOCOL UPDATE: {status_msg}")
-                        self.sys_flag_6 = True
+                floor_clamp = int(45 * self.my_scalar)
+                if (t2_h + BAND_LOW) < floor_clamp: BAND_LOW = floor_clamp - t2_h
+
+                BAND_HIGH = int(BAND_HIGH * random.uniform(0.98, 1.02))
+                BAND_LOW = int(BAND_LOW * random.uniform(0.98, 1.02))
+
+                clamped_flux = max(int(-15 * self.my_scalar), min(int(15 * self.my_scalar), self.flux_delta))
+                eff_high = max(BAND_LOW + int(10 * self.my_scalar), BAND_HIGH - max(0, clamped_flux))
+                eff_low = BAND_LOW + min(0, clamped_flux)
+
+                if self.cooldown_latch:
+                    if discrepancy <= eff_low: self.cooldown_latch = False
                 else:
-                    self.sys_flag_6 = False
+                    if discrepancy >= eff_high: self.cooldown_latch = True
 
-                if self.handler.verify_hardware_state(0x58): # Key 'X' Panic Break
-                    if self.current_node_state != "NODE_0_IDLE":
-                        print("\n[🚨] BREAKPOINT TRIGGERED! Severing active links, rolling back to idle state...")
-                        self.handler.trigger_up_event() 
-                        self.current_node_state = "NODE_0_IDLE"
-                        self.purge_pipeline_buffers()
-                        self.sequential_timeout_anomalies = 0
-                        time.sleep(0.5) 
-                        continue 
+                if 0 < t2_h < int(35 * self.my_scalar):
+                    if t1_h < (self.L_B_G - int(25 * self.my_scalar)):
+                        self.cooldown_latch = False
+                        floor_override = True
+                        self.stagnant_accumulation = 0
 
-                frame_packet = self.dx_capture_session.get_latest_frame()
-                if frame_packet is None: continue
-                process_text = "STANDBY"
+                c_enter = self.L_B_G - int(5 * self.my_scalar)
+                c_exit = self.L_B_G - int(135 * self.my_scalar)
+                if t1_h >= c_enter: self.roof_alert_latch = True
+                elif t1_h <= c_exit: self.roof_alert_latch = False
 
-                try:
-                    if self.current_node_state == "NODE_0_IDLE":
-                        process_text = "Awaiting execution key input '3'..."
-                        if self.handler.verify_hardware_state(0x33):
-                            print("\n>>> System link established. Processing synchronization loop...")
-                            self.current_node_state = "NODE_1_SCANNING"
-                            self.awaiting_node_start_time = time.time() 
-                            self.sequential_timeout_anomalies = 0
-                            time.sleep(1.0) 
+                if self.roof_alert_latch:
+                    self.cooldown_latch = True
+                    roof_override = True
+                    floor_override = False
+                    self.stagnant_accumulation = 0
 
-                    elif self.current_node_state == "NODE_1_SCANNING":
-                        if time.time() - self.awaiting_node_start_time > self.max_timeout_threshold: 
-                            self.sequential_timeout_anomalies += 1 
-                            print(f"\n[⚠️] PIPELINE TIMEOUT STRIKE DETECTED! Accumulation level: {self.sequential_timeout_anomalies}/6")
-                            
-                            if self.sequential_timeout_anomalies == 1:
-                                print("    -> Redirection Action: Retransmitting execution key [Trigger 3]...")
-                                self.handler.dispatch_tap(0x04) 
-                                self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.05, 0.15))
-                                continue
-                                
-                            elif self.sequential_timeout_anomalies == 2:
-                                print("    -> Redirection Action: Interface offset detected. Initializing Sync Layer-1 via console...")
-                                self.execute_interface_sync() 
-                                print("    -> Re-establishing stream links post-sync sequence...")
-                                self.handler.dispatch_tap(0x04) 
-                                self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.02, 0.12))
-                                continue
-                                
-                            elif self.sequential_timeout_anomalies == 3:
-                                print("    -> Redirection Action: Sync layer unverified. Pushing redundant signal...")
-                                self.handler.dispatch_tap(0x04) 
-                                self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.04, 0.16))
-                                continue
-                                
-                            elif self.sequential_timeout_anomalies == 4:
-                                print("    -> Redirection Action: Recalibrating cluster viewports. Running Sync Layer-2...")
-                                self.execute_interface_sync() 
-                                print("    -> Re-establishing stream links post-sync sequence 2...")
-                                self.handler.dispatch_tap(0x04) 
-                                self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.05, 0.11))
-                                continue
-                                
-                            elif self.sequential_timeout_anomalies == 5:
-                                print("    -> Redirection Action: Secondary fallback verified. Transmitting final link verification...")
-                                self.handler.dispatch_tap(0x04) 
-                                self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.02, 0.18))
-                                continue
+                # TOP-END CRITICAL BRAKE SYSTEM (Pengereman batas atas darurat)
+                if t2_h >= int(370 * self.my_scalar):
+                    if discrepancy >= int(5 * self.my_scalar) or t1_h >= int(350 * self.my_scalar):
+                        self.cooldown_latch = True
+                        roof_override = True
 
-                            elif self.sequential_timeout_anomalies >= 6:
-                                if self.termination_protocol_active:
-                                    self.force_pipeline_shutdown()
-                                else:
-                                    print("\n[🚨] SYSTEM ERROR BOUNDS REACHED: Sync engine exhausted. Safe recovery failed.")
-                                    print("[🔒] Restoring baseline link state -> NODE_IDLE...\n")
-                                    self.handler.trigger_up_event()
-                                    self.current_node_state = "NODE_0_IDLE"
-                                    self.purge_pipeline_buffers()
-                                    self.sequential_timeout_anomalies = 0 
-                                    time.sleep(1.0)
-                                    continue
+                if not self.cooldown_latch and not floor_override:
+                    if self.flux_delta <= 1 and delta_w <= 1: self.stagnant_accumulation += 1
+                    else: self.stagnant_accumulation = 0
+                    if self.stagnant_accumulation >= self.stall_threshold:
+                        self.cooldown_latch = True
+                        self.stagnant_accumulation = 0
+                else:
+                    self.stagnant_accumulation = 0
 
-                        hsv_converted_matrix = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
-                        data_mask_g = cv2.inRange(hsv_converted_matrix, self.lower_tier_g, self.upper_tier_g)
-                        extracted_contours_g, _ = cv2.findContours(data_mask_g, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if self.cooldown_latch:
+                    self.io.sys_commit_up()
+                else:
+                    self.io.sys_commit_down()
 
-                        if extracted_contours_g:
-                            prominent_contour = max(extracted_contours_g, key=cv2.contourArea)
-                            if cv2.contourArea(prominent_contour) > 20: 
-                                x_b, y_b, w_b, h_b = cv2.boundingRect(prominent_contour)
-                                calc_h_min, calc_h_max = max(1, int(3 * self.scale_factor_y)), int(15 * self.scale_factor_y)
-                                calc_w_min = int(50 * self.scale_factor_x) 
-                                
-                                if (calc_h_min <= h_b <= calc_h_max) and w_b > calc_w_min and w_b > (h_b * 4):
-                                    process_text = "SIGNATURE VALIDATED! ACQUIRING CHANNEL..."
-                                    self.handler.execute_single_signal()
-                                    time.sleep(0.2 + random.uniform(0.01, 0.04)) 
-                                    self.handler.trigger_up_event() 
-                                    
-                                    self.sequential_timeout_anomalies = 0 
-                                    self.purge_pipeline_buffers()
-                                    self.current_node_state = "NODE_2_STREAM_PROCESSING"
-                                    self.phase3_start_time = time.time() 
-                                    self.last_frame_verification_time = time.time() 
-                                else:
-                                    process_text = f"ANALYSIS OVERRIDE: NOISE EXCLUDED (W:{w_b} H:{h_b})"
+            if not packet_valid:
+                loss_time = time.time() - self.last_packet_time
+                active_time = time.time() - self.proc_start_time
+                
+                if active_time < 2.0 and self.max_v_w < int(10 * self.my_scalar):
+                    self.io.sys_commit_down()
+                elif self.stream_registered_flag and loss_time < 0.6:
+                    self.io.sys_commit_up()
+                    self.cooldown_latch = True
+                else:
+                    self.io.sys_commit_up()
+                    self.pipeline_state = 0
+                    
+                    if self.max_v_w >= self.V_B_W:
+                        # Pemicu transfer data payload otomatis (Auto Collect)
+                        time.sleep(0.82 + random.uniform(0.02, 0.12))
+                        rnd_x = random.randint(801, 849)
+                        rnd_y = random.randint(921, 939)
+                        abs_x = int(rnd_x * self.mx_scalar)
+                        abs_y = int(rnd_y * self.my_scalar)
+                        self.io.sys_interpolate_gaussian(abs_x, abs_y, velocity=0.23)
+                        time.sleep(random.uniform(0.12, 0.22))
+                        self.io.sys_emit_impulse()
+                    
+                    # Siklus pemulihan loop internal
+                    fuzzed_delay = self.realloc_delay_sec + random.uniform(0.12, 0.65)
+                    time.sleep(fuzzed_delay)
+                    self.io.sys_dispatch_tap(0x04) # Tap 3 re-cast
+                    self.pipeline_state = 1
+                    self.clear_runtime_matrices()
+                    self.state_init_timestamp = time.time()
 
-                    elif self.current_node_state == "NODE_2_STREAM_PROCESSING":
-                        hsv_converted_matrix = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
-                        data_mask_g = cv2.inRange(hsv_converted_matrix, self.lower_tier_g, self.upper_tier_g)
-                        data_mask_w = cv2.inRange(hsv_converted_matrix, self.lower_tier_w, self.upper_tier_w)
-                        
-                        extracted_contours_g, _ = cv2.findContours(data_mask_g, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                        extracted_contours_w, _ = cv2.findContours(data_mask_w, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                        
-                        packet_stream_valid = False
-                        current_g_h, current_w_h = 0, 0
-                        forced_fallback_active = False
-                        floor_override_active = False
+        return True
 
-                        if extracted_contours_w:
-                            extracted_contours_w = sorted(extracted_contours_w, key=cv2.contourArea, reverse=True)
-                            for segment_w in extracted_contours_w:
-                                if cv2.contourArea(segment_w) >= 2: 
-                                    x_t, y_t, w_t, h_t = cv2.boundingRect(segment_w)
-                                    computed_w_min = max(1, int(2 * self.scale_factor_x))
-                                    computed_w_max = int(25 * self.scale_factor_x)
-                                    
-                                    if h_t >= int(5 * self.scale_factor_y) and computed_w_min <= w_t <= computed_w_max and h_t >= (w_t * 1.2):
-                                        if self.stream_ever_validated and h_t < (self.history_w_h - int(80 * self.scale_factor_y)):
-                                            continue
-                                        current_w_h = h_t
-                                        packet_stream_valid = True  
-                                        self.stream_ever_validated = True 
-                                        self.last_frame_verification_time = time.time()
-                                        if current_w_h > self.peak_buffer_w_h: self.peak_buffer_w_h = current_w_h
-                                        break 
+    def close_pipeline(self):
+        self.io.sys_commit_up()
+        self.dx_session.stop()
 
-                        matrix_g_valid_this_tick = False
-                        if packet_stream_valid and extracted_contours_g:
-                            extracted_contours_g = sorted(extracted_contours_g, key=cv2.contourArea, reverse=True)
-                            for segment_g in extracted_contours_g:
-                                if cv2.contourArea(segment_g) >= 2: 
-                                    _, _, _, hg = cv2.boundingRect(segment_g)
-                                    current_g_h = hg
-                                    matrix_g_valid_this_tick = True
-                                    if current_g_h > self.peak_buffer_g_h: 
-                                        self.peak_buffer_g_h = current_g_h
-                                    break
 
-                        if packet_stream_valid and not matrix_g_valid_this_tick:
-                            if self.history_g_h > 0:
-                                current_g_h = self.history_g_h 
-                            else:
-                                self.state_cooldown_active = True
-
-                        if packet_stream_valid:
-                            current_discrepancy = current_g_h - current_w_h
-                            self.incremental_variance = current_discrepancy - self.history_variance
-                            delta_w_height = current_w_h - self.history_w_h 
-
-                            self.history_g_h = current_g_h
-                            self.history_w_h = current_w_h
-                            self.history_variance = current_discrepancy
-
-                            available_safe_margin = self.LIMIT_G - current_w_h - self.BUFFER_S
-                            BAND_HIGH = max(int(10 * self.scale_factor_y), min(self.HIGH_BAND_LIMIT, available_safe_margin))
-                            
-                            if current_w_h < int(30 * self.scale_factor_y):
-                                dynamically_computed_swing = int(80 * self.scale_factor_y) 
-                                BAND_HIGH = max(BAND_HIGH, int(80 * self.scale_factor_y)) 
-                            elif current_w_h < int(100 * self.scale_factor_y):
-                                dynamically_computed_swing = int(100 * self.scale_factor_y) 
-                                BAND_HIGH = max(BAND_HIGH, int(100 * self.scale_factor_y))
-                            elif current_w_h > (self.VAL_THRESHOLD - int(40 * self.scale_factor_y)):
-                                dynamically_computed_swing = int(50 * self.scale_factor_y) 
-                            else:
-                                dynamically_computed_swing = self.SWING_MIN_BOUND
-
-                            if current_w_h < self.CRIT_GRIP_LIMIT:
-                                dynamically_computed_swing = min(dynamically_computed_swing, self.CRIT_GRIP_SWING) 
-
-                            BAND_LOW = BAND_HIGH - dynamically_computed_swing
-                            
-                            if current_w_h > (self.VAL_THRESHOLD - int(40 * self.scale_factor_y)):
-                                BAND_LOW = max(BAND_LOW, -int(170 * self.scale_factor_y)) 
-                            else:
-                                BAND_LOW = max(BAND_LOW, -int(60 * self.scale_factor_y))
-
-                            computed_floor = int(45 * self.scale_factor_y)
-                            if (current_w_h + BAND_LOW) < computed_floor:
-                                BAND_LOW = computed_floor - current_w_h
-
-                            BAND_HIGH = int(BAND_HIGH * random.uniform(0.98, 1.02))
-                            BAND_LOW  = int(BAND_LOW  * random.uniform(0.98, 1.02))
-
-                            clamped_variance = max(int(-15 * self.scale_factor_y), min(int(15 * self.scale_factor_y), self.incremental_variance))
-                            effective_band_high = max(BAND_LOW + int(10 * self.scale_factor_y), BAND_HIGH - max(0, clamped_variance))
-                            effective_band_low  = BAND_LOW + min(0, clamped_variance)
-                                 
-                            if self.state_cooldown_active:
-                                if current_discrepancy <= effective_band_low: self.state_cooldown_active = False
-                            else:
-                                if current_discrepancy >= effective_band_high: self.state_cooldown_active = True
-
-                            # Sub-Floor Safe System
-                            if 0 < current_w_h < int(35 * self.scale_factor_y):
-                                if current_g_h < (self.LIMIT_G - int(25 * self.scale_factor_y)):
-                                    self.state_cooldown_active = False
-                                    floor_override_active = True
-                                    self.stagnant_frame_accumulation = 0
-
-                            # Roof Limit Safeguard
-                            CEILING_ALERT_ENTER = self.LIMIT_G - int(5  * self.scale_factor_y)
-                            CEILING_ALERT_EXIT  = self.LIMIT_G - int(135 * self.scale_factor_y) 
-                            
-                            if current_g_h >= CEILING_ALERT_ENTER: self.recovery_bypass_active = True
-                            elif current_g_h <= CEILING_ALERT_EXIT: self.recovery_bypass_active = False
-
-                            if self.recovery_bypass_active:
-                                self.state_cooldown_active = True
-                                forced_fallback_active = True
-                                floor_override_active = False
-                                self.stagnant_frame_accumulation = 0
-
-                            # TOP-END CRITICAL BRAKE SYSTEM (Strict Buffer Prevention)
-                            if current_w_h >= int(370 * self.scale_factor_y):
-                                if current_discrepancy >= int(5 * self.scale_factor_y) or current_g_h >= int(350 * self.scale_factor_y):
-                                    self.state_cooldown_active = True
-                                    forced_fallback_active = True
-
-                            # Static Stream Freeze Prevention Logic (Stall Check)
-                            if not self.state_cooldown_active and not floor_override_active:
-                                if self.incremental_variance <= 1 and delta_w_height <= 1: 
-                                    self.stagnant_frame_accumulation += 1
-                                else: 
-                                    self.stagnant_frame_accumulation = 0
-                                    
-                                if self.stagnant_frame_accumulation >= self.config_stall_frames:
-                                    self.state_cooldown_active = True
-                                    self.stagnant_frame_accumulation = 0
-                            else:
-                                self.stagnant_frame_accumulation = 0
-
-                            if self.state_cooldown_active:
-                                self.handler.trigger_up_event()
-                                process_text = "TRANSMITTING CONTROL RELEASE" if not forced_fallback_active else "CRITICAL BRAKE OVERRIDE EMITTED"
-                            else:
-                                self.handler.trigger_down_event()
-                                process_text = "TRANSMITTING CONTROL HOLD" if not floor_override_active else "CRITICAL FLOOR ACCELERATION EMITTED"
-
-                        if not packet_stream_valid:
-                            verification_loss_duration = time.time() - self.last_frame_verification_time
-                            pipeline_active_duration = time.time() - self.phase3_start_time
-                            
-                            if pipeline_active_duration < 2.0 and self.peak_buffer_w_h < int(10 * self.scale_factor_y):
-                                self.handler.trigger_down_event()
-                                process_text = "INITIAL CHANNEL INTEGRATION STAGE..."
-                            elif self.stream_ever_validated and verification_loss_duration < 0.6:
-                                self.handler.trigger_up_event() 
-                                self.state_cooldown_active = True 
-                                process_text = "FRAME FLICKER INTERPOLATION STAGE..."
-                            else:
-                                self.handler.trigger_up_event()
-                                print(f"\n>>> Visual stream carrier lost. Processing termination analysis metrics...")
-                                print(f"    METRICS: Peak Width height: {self.peak_buffer_w_h}px | Peak Target height: {self.peak_buffer_g_h}px | Threshold Target: >{self.VAL_THRESHOLD}px")
-                                
-                                if self.peak_buffer_w_h >= self.VAL_THRESHOLD: 
-                                    print(f"    STATUS REPORT: STREAM CYCLE TERMINATED SUCCESSFULLY (VALID PACKET)\n")
-                                    self.dispatch_payload_collection()
-                                    
-                                    if self.routine_switch_active and (time.time() - self.last_routine_execution_timestamp) >= (self.routine_delay_interval * 60):
-                                        print(f">>> Processing macro schedule buffer interval before executing loop stabilization tools...")
-                                        # Added high-variance fuzzing to cycle wait times
-                                        fuzzed_sleep = self.allocation_sleep_delay + random.uniform(0.15, 0.65)
-                                        if self.secure_sleep_interceptor(fuzzed_sleep): continue
-                                        self.execute_maintenance_sequence()
-                                        self.last_routine_execution_timestamp = time.time()
-                                else:
-                                    print(f"    STATUS REPORT: STREAM BREAKPOINT UNEXPECTED (PACKET DROP / DISCONNECT)\n")
-                                    
-                                fuzzed_reconnect_delay = self.allocation_sleep_delay + random.uniform(0.18, 0.72)
-                                print(f">>> Connection matrix unlinked. Re-establishing pipeline session in {fuzzed_reconnect_delay:.2f} seconds...")
-                                if self.secure_sleep_interceptor(fuzzed_reconnect_delay): continue 
-                                    
-                                self.handler.dispatch_tap(0x04) 
-                                self.current_node_state = "NODE_1_SCANNING" 
-                                self.purge_pipeline_buffers()
-                                self.awaiting_node_start_time = time.time() 
-                                if self.secure_sleep_interceptor(1.0 + random.uniform(0.02, 0.11)): continue
-
-                except Exception as inner_error:
-                    pass
-
-                if self.verbosity_log_active:
-                    self.print_pipeline_statistics(process_text)
-
-        except KeyboardInterrupt:
-            print("\n[!] Force close signal intercepted (Ctrl + C). Disposing active window hooks...")
-        except Exception as e:
-            print(f"\n[!] Critical Runtime Failure: {e}")
-        finally:
-            self.handler.trigger_up_event()
-            self.dx_capture_session.stop()
-            os._exit(0)
-
+# ==============================================================================
+# 4. MONITOR CONTEXT ENTRY
+# ==============================================================================
 if __name__ == "__main__":
-    bot = DataStreamPipeline()
-    bot.run()
+    # Deteksi argumen konsol untuk menentukan jenis eksekusi binary
+    console_mode_active = True
+    if "--silent-mode" in sys.argv:
+        console_mode_active = False
+
+    engine = OperationalDataPipeline(output_to_console=console_mode_active)
+    
+    try:
+        while True:
+            # Jalankan siklus mesin utama
+            status_alive = engine.process_pipeline_lifecycle()
+            if not status_alive:
+                break
+            time.sleep(0.002)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        engine.close_pipeline()
+        os._exit(0)
