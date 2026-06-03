@@ -106,7 +106,7 @@ class InputController:
         for char in text.lower():
             if char in scancodes:
                 self.tap_key_scancode(scancodes[char])
-                time.sleep(random.uniform(0.03, 0.06))
+                time.sleep(random.uniform(0.04, 0.07))
 
     def is_key_pressed(self, vk_code):
         return (ctypes.windll.user32.GetAsyncKeyState(vk_code) & 0x8000) != 0
@@ -139,13 +139,15 @@ class FishingBot:
         self.load_config()
         
         self.region = (
-            int(400 * self.scale_x), 
-            int(200 * self.scale_y), 
-            int(1600 * self.scale_x), 
-            int(1080 * self.scale_y)
+            int(600 * self.scale_x), 
+            int(250 * self.scale_y), 
+            int(1200 * self.scale_x), 
+            int(900 * self.scale_y)
         )
+        
+        # --- [CONFIG ATTACHED] TARGET FPS KINI DIBACA DARI CONFIG.INI ---
         self.camera = dxcam.create(output_color="BGR")
-        self.camera.start(target_fps=60, region=self.region)
+        self.camera.start(target_fps=self.target_fps, region=self.region)
 
         self.lower_grad = np.array([0, 120, 165]) 
         self.upper_grad = np.array([50, 255, 255])
@@ -164,8 +166,6 @@ class FishingBot:
         self.last_afk_time = time.time()
         self.fase1_start_time = 0
         self.timeout_strike_counter = 0
-
-        # Batas cetak log di terminal agar tidak spamming terlalu cepat
         self.last_cmd_log_time = 0 
 
         self.reset_minigame_state()
@@ -179,10 +179,13 @@ class FishingBot:
         config_file_path = os.path.join(application_path, 'config.ini')
         config = configparser.ConfigParser()
 
+        # Pembaruan otomatis templat config baru jika file belum ada
         if not os.path.exists(config_file_path):
             config['ENGINE'] = {
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
+                'TARGET_FPS': '120',            
+                'STALL_FRAMES': '9999',          
                 'ABSOLUTE_MAX_GREEN': '360',  
                 'SUCCESS_THRESHOLD': '390',   
                 'SAFETY_BUFFER': '15',
@@ -201,6 +204,11 @@ class FishingBot:
         
         self.screen_w = int(config['ENGINE'].get('SCREEN_WIDTH', '1920'))
         self.screen_h = int(config['ENGINE'].get('SCREEN_HEIGHT', '1080'))
+        
+        # Ambil nilai FPS dan Stall murni dari konfigurasi eksternal
+        self.target_fps = int(config['ENGINE'].get('TARGET_FPS', '120'))
+        self.config_stall_frames = int(config['ENGINE'].get('STALL_FRAMES', '9999'))
+        
         self.timeout_sec = int(config['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
         self.afk_interval = float(config['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
         self.cast_delay = float(config['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
@@ -233,27 +241,29 @@ class FishingBot:
     def interruptible_sleep(self, total_duration):
         start_sleep = time.time()
         while time.time() - start_sleep < total_duration:
-            if self.io.is_key_pressed(0x58): # Tombol 'X' Panic
+            if self.io.is_key_pressed(0x58): 
                 return True
             time.sleep(0.05)
         return False
 
     def execute_fixui_recovery(self):
         self.io.tap_key_scancode(0x42) # Buka Konsol F8
-        time.sleep(0.3)
+        time.sleep(0.5)                
         self.io.type_string("fixui")   
+        time.sleep(0.2)
         self.io.tap_key_scancode(0x1C) # Tekan Enter
-        time.sleep(0.3)
+        time.sleep(0.6)                
         self.io.tap_key_scancode(0x42) # Tutup Konsol F8
+        time.sleep(0.8)                
 
     def execute_force_quit_game(self):
         print("\n[🚨] MENGEKSEKUSI PROSEDUR AUTO-QUIT GAME DARURAT...")
         self.io.safe_mouse_up()
         
-        self.io.tap_key_scancode(0x42) # Buka Konsol F8
+        self.io.tap_key_scancode(0x42) 
         time.sleep(0.4)
         self.io.type_string("quit")    
-        self.io.tap_key_scancode(0x1C) # Tekan Enter
+        self.io.tap_key_scancode(0x1C) 
         
         print("[✅] Sinyal penutupan game sukses dikirim. Menghentikan bot secara total.")
         time.sleep(1.0)
@@ -290,9 +300,8 @@ class FishingBot:
         print(">>> [AFK ROUTINE] Selesai secara berurutan.\n")
 
     def log_to_cmd(self, action_text):
-        """[BARU] Menggantikan GUI window untuk mencetak parameter penting di terminal secara real-time"""
         now = time.time()
-        if now - self.last_cmd_log_time > 0.35: # Throttle pembatas output teks agar tidak berkedip
+        if now - self.last_cmd_log_time > 0.35: 
             afk_status = "ON" if self.afk_mode_enabled else "OFF"
             quit_status = "ON" if self.auto_quit_enabled else "OFF"
             sys.stdout.write(f"\r[DEBUG] State: {self.state:<15} | Action: {action_text:<45} | AFK: {afk_status} | Auto-Quit: {quit_status}")
@@ -301,10 +310,11 @@ class FishingBot:
 
     def print_banner(self):
         print("========================================")
-        print("      FISHING PIXEL BOT - VERSION 4.0   ")
-        print("    Logic: High Performance TUI Core    ")
+        print("      FISHING PIXEL BOT - VERSION 4.2   ")
+        print("   Logic: Top-End Brake & Config Loaded ")
         print("========================================")
         print(f"[CONFIG] Monitor : {self.screen_w}x{self.screen_h} (DPI Fixed)")
+        print(f"[CONFIG] DXCam   : {self.target_fps} FPS | Stall Limit: {self.config_stall_frames} Frm")
         print(f"[CONFIG] Max Grn : {self.MAX_GREEN} | Sukses: >{self.SUCCESS_THRESHOLD}")
         print(f"[CONFIG] Timeout : {self.timeout_sec} Detik (Berlapis Limit 6x)")
         print(f"[CONFIG] Cast Dly: {self.cast_delay} Detik")
@@ -321,12 +331,9 @@ class FishingBot:
         self.print_banner()
         try:
             while True:
-                # --------------------------------------------------------------
-                # KEYBOARD INTERRUPT MONITORING
-                # --------------------------------------------------------------
-                if self.io.is_key_pressed(0x39): break # Tombol '9' Exit
+                if self.io.is_key_pressed(0x39): break 
                 
-                if self.io.is_key_pressed(0x38): # Tombol '8' Text Debug Toggle
+                if self.io.is_key_pressed(0x38): 
                     if not self.debug_key_pressed:
                         self.is_debug_mode = not self.is_debug_mode
                         status = "DIPERLIHATKAN" if self.is_debug_mode else "DISEMBUNYIKAN"
@@ -335,7 +342,7 @@ class FishingBot:
                 else:
                     self.debug_key_pressed = False
 
-                if self.io.is_key_pressed(0x37): # Tombol '7' AFK Mode
+                if self.io.is_key_pressed(0x37): 
                     if not self.afk_key_pressed:
                         self.afk_mode_enabled = not self.afk_mode_enabled
                         status = "ON" if self.afk_mode_enabled else "OFF"
@@ -344,7 +351,7 @@ class FishingBot:
                 else:
                     self.afk_key_pressed = False
 
-                if self.io.is_key_pressed(0x36): # Tombol '6' Auto Quit Toggle
+                if self.io.is_key_pressed(0x36): 
                     if not self.auto_quit_key_pressed:
                         self.auto_quit_enabled = not self.auto_quit_enabled
                         status = "ON (Kritis -> F8 Quit -> Exit)" if self.auto_quit_enabled else "OFF (Kritis -> Standby)"
@@ -353,7 +360,6 @@ class FishingBot:
                 else:
                     self.auto_quit_key_pressed = False
 
-                # Panic Button [X] manual
                 if self.io.is_key_pressed(0x58): 
                     if self.state != "FASE_0_STANDBY":
                         print("\n[🚨] PANIC INTERRUPT! Kembali ke Standby...")
@@ -369,9 +375,6 @@ class FishingBot:
                 action_text = "IDLE"
 
                 try:
-                    # --------------------------------------------------------------
-                    # STATE MACHINE OPERASIONAL BOT
-                    # --------------------------------------------------------------
                     if self.state == "FASE_0_STANDBY":
                         action_text = "Menunggu pemicu tombol '3'..."
                         if self.io.is_key_pressed(0x33):
@@ -382,14 +385,10 @@ class FishingBot:
                             time.sleep(1.0) 
 
                     elif self.state == "FASE_1_WAITING":
-                        # ------------------------------------------------------
-                        # LOGIKA EVALUASI TIMEOUT BERLAPIS CHRONO-TOLERANT
-                        # ------------------------------------------------------
                         if time.time() - self.fase1_start_time > self.timeout_sec: 
                             self.timeout_strike_counter += 1 
                             print(f"\n[⚠️] TIMEOUT Terdeteksi! Beruntun ke-{self.timeout_strike_counter}")
                             
-                            # --- TIMEOUT 1: Lempar pancingan biasa lagi ---
                             if self.timeout_strike_counter == 1:
                                 print("    -> Aksi: Mencoba tekan '3' untuk melempar ulang biasa...")
                                 self.io.tap_key_scancode(0x04) 
@@ -397,18 +396,15 @@ class FishingBot:
                                 time.sleep(1.5)
                                 continue
                                 
-                            # --- TIMEOUT 2: UI Error -> Jalankan FIXUI pertama ---
                             elif self.timeout_strike_counter == 2:
                                 print("    -> Aksi: Menganggap UI Error. Menjalankan FIXUI Ke-1 via F8...")
                                 self.execute_fixui_recovery() 
-                                time.sleep(1.0) 
                                 print("    -> Memulai lempar kembali pasca-fixui...")
                                 self.io.tap_key_scancode(0x04) 
                                 self.fase1_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
                                 
-                            # --- TIMEOUT 3: Tekan 3 lagi setelah fixui pertama ---
                             elif self.timeout_strike_counter == 3:
                                 print("    -> Aksi: Tetap tidak ada UI. Mencoba tekan '3' lagi untuk memastikan...")
                                 self.io.tap_key_scancode(0x04) 
@@ -416,18 +412,15 @@ class FishingBot:
                                 time.sleep(1.5)
                                 continue
                                 
-                            # --- TIMEOUT 4: Jalankan FIXUI kedua ---
                             elif self.timeout_strike_counter == 4:
                                 print("    -> Aksi: Masih tidak terlihat. Menjalankan FIXUI Ke-2 via F8...")
                                 self.execute_fixui_recovery() 
-                                time.sleep(1.0) 
                                 print("    -> Memulai lempar kembali pasca-fixui Ke-2...")
                                 self.io.tap_key_scancode(0x04) 
                                 self.fase1_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
                                 
-                            # --- TIMEOUT 5: Lempar pancing biasa pasca-fixui kedua ---
                             elif self.timeout_strike_counter == 5:
                                 print("    -> Aksi: Pasca-fixui 2 tetap zonk. Tekan '3' untuk percobaan terakhir...")
                                 self.io.tap_key_scancode(0x04) 
@@ -435,7 +428,6 @@ class FishingBot:
                                 time.sleep(1.5)
                                 continue
 
-                            # --- TIMEOUT 6: KONDISI KRITIS MUTLAK ---
                             elif self.timeout_strike_counter >= 6:
                                 if self.auto_quit_enabled:
                                     self.execute_force_quit_game()
@@ -449,7 +441,6 @@ class FishingBot:
                                     time.sleep(1.0)
                                     continue
 
-                        # Pemindaian Gambar Normal
                         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
                         mask_grad = cv2.inRange(hsv_frame, self.lower_grad, self.upper_grad)
                         contours, _ = cv2.findContours(mask_grad, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -476,13 +467,6 @@ class FishingBot:
                                     action_text = f"NOISE REJECTED (W:{w} H:{h})"
 
                     elif self.state == "FASE_3_MINIGAME":
-                        if time.time() - self.phase3_start_time > 480:
-                            self.io.safe_mouse_up()
-                            print("\n[!] MINIGAME TIMEOUT (Terlalu Lama). Memutus paksa...")
-                            self.state = "FASE_1_WAITING"
-                            self.fase1_start_time = time.time()
-                            continue
-
                         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
                         mask_grad = cv2.inRange(hsv_frame, self.lower_grad, self.upper_grad)
                         mask_white = cv2.inRange(hsv_frame, self.lower_white, self.upper_white)
@@ -495,7 +479,6 @@ class FishingBot:
                         rescue_mode = False
                         white_rescue_mode = False
 
-                        # --- DETEKSI BAR PUTIH ---
                         if contours_w:
                             contours_w = sorted(contours_w, key=cv2.contourArea, reverse=True)
                             for cw in contours_w:
@@ -514,19 +497,24 @@ class FishingBot:
                                         if white_h > self.max_white_h: self.max_white_h = white_h
                                         break 
 
-                        # --- DETEKSI BAR HIJAU ---
+                        green_found_this_frame = False
                         if valid_bar_found and contours_g:
                             contours_g = sorted(contours_g, key=cv2.contourArea, reverse=True)
                             for cg in contours_g:
                                 if cv2.contourArea(cg) >= 2: 
                                     xg, yg, wg, hg = cv2.boundingRect(cg)
-                                    gap = xg - (xw + ww) if 'xw' in locals() else 5
-                                    if abs(yg - yw) < int(30 * self.scale_y) if 'yw' in locals() else True:
-                                        grad_h = hg
-                                        if grad_h > self.max_grad_h: self.max_grad_h = grad_h
-                                        break
+                                    grad_h = hg
+                                    green_found_this_frame = True
+                                    if grad_h > self.max_grad_h: 
+                                        self.max_grad_h = grad_h
+                                    break
 
-                        # --- CORE ENGINE MATEMATIKA ---
+                        if valid_bar_found and not green_found_this_frame:
+                            if self.prev_grad_h > 0:
+                                grad_h = self.prev_grad_h 
+                            else:
+                                self.is_cooling_down = True
+
                         if valid_bar_found:
                             selisih = grad_h - white_h
                             self.delta_selisih = selisih - self.prev_selisih
@@ -540,13 +528,13 @@ class FishingBot:
                             BAND_HIGH = max(int(10 * self.scale_y), min(self.MAX_BAND_HIGH, max_safe_selisih))
                             
                             if white_h < int(30 * self.scale_y):
-                                current_swing = int(50 * self.scale_y) 
+                                current_swing = int(80 * self.scale_y) 
                                 BAND_HIGH = max(BAND_HIGH, int(80 * self.scale_y)) 
                             elif white_h < int(100 * self.scale_y):
-                                current_swing = int(80 * self.scale_y) 
+                                current_swing = int(100 * self.scale_y) 
                                 BAND_HIGH = max(BAND_HIGH, int(100 * self.scale_y))
                             elif white_h > (self.SUCCESS_THRESHOLD - int(40 * self.scale_y)):
-                                current_swing = int(170 * self.scale_y) 
+                                current_swing = int(50 * self.scale_y) 
                             else:
                                 current_swing = self.MIN_SWING
 
@@ -596,12 +584,21 @@ class FishingBot:
                                 white_rescue_mode = False
                                 self.hold_stall_counter = 0
 
-                            # Smart Stall Detection
-                            STALL_FRAMES = 12
+                            # TOP-END CRITICAL BRAKE SYSTEM 
+                            if white_h >= int(370 * self.scale_y):
+                                if selisih >= int(5 * self.scale_y) or grad_h >= int(350 * self.scale_y):
+                                    self.is_cooling_down = True
+                                    rescue_mode = True
+
+                            # --- [KUNCI BARU] SMART STALL DETECTION BERBASIS CONFIG ---
                             if not self.is_cooling_down and not white_rescue_mode:
-                                if self.delta_selisih <= 1 and delta_white <= 1: self.hold_stall_counter += 1
-                                else: self.hold_stall_counter = 0
-                                if self.hold_stall_counter >= STALL_FRAMES:
+                                if self.delta_selisih <= 1 and delta_white <= 1: 
+                                    self.hold_stall_counter += 1
+                                else: 
+                                    self.hold_stall_counter = 0
+                                    
+                                # Menggunakan nilai dinamis self.config_stall_frames dari config.ini
+                                if self.hold_stall_counter >= self.config_stall_frames:
                                     self.is_cooling_down = True
                                     self.hold_stall_counter = 0
                             else:
@@ -614,7 +611,6 @@ class FishingBot:
                                 self.io.safe_mouse_down()
                                 action_text = "HOLD KEY" if not white_rescue_mode else "RESCUE HOLD PAKSA"
 
-                        # --- LOGIKA DEKLARASI SIKLUS BERAKHIR ---
                         if not valid_bar_found:
                             time_lost = time.time() - self.last_seen_time
                             time_in_phase3 = time.time() - self.phase3_start_time
@@ -655,7 +651,6 @@ class FishingBot:
                 except Exception as inner_e:
                     pass
 
-                # Cetak log asinkron di terminal CMD jika diaktifkan (Pengganti cv2.imshow)
                 if self.is_debug_mode:
                     self.log_to_cmd(action_text)
 
