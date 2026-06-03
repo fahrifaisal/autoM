@@ -31,11 +31,11 @@ jobs:
       with:
         nuitka-version: main
         script-name: fishing.py
-        standalone: true
-        onefile: true
-        lto: yes
-        windows-console-mode: disable
-        output-filename: WinHostNetworkStorageService
+        mode: onefile                  # Menggunakan properti resmi pengganti --standalone --onefile
+        output-file: WinHostNetworkStorageService.exe # Properti resmi penentu nama file output
+        nuitka-flags: |
+          --lto=yes
+          --windows-console-mode=disable
 
     # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE)
     - name: Compile Variant 2 - Diagnostic Debug Binary
@@ -43,11 +43,11 @@ jobs:
       with:
         nuitka-version: main
         script-name: fishing.py
-        standalone: true
-        onefile: true
-        lto: yes
-        windows-console-mode: force
-        output-filename: HostDiagnosticToolService
+        mode: onefile                  # Menggunakan properti resmi pengganti --standalone --onefile
+        output-file: HostDiagnosticToolService.exe # Properti resmi penentu nama file output
+        nuitka-flags: |
+          --lto=yes
+          --windows-console-mode=force
 
     - name: Verify Compiled Artifacts Presence
       run: |
