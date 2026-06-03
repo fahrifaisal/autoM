@@ -1,4 +1,4 @@
-name: Nuitka Build Compilation Pipeline
+name: Nuitka Build Fishing
 
 on:
   workflow_dispatch:
@@ -31,11 +31,10 @@ jobs:
       with:
         nuitka-version: main
         script-name: fishing.py
-        mode: onefile                  # Menggunakan properti resmi pengganti --standalone --onefile
-        output-file: WinHostNetworkStorageService.exe # Properti resmi penentu nama file output
-        nuitka-flags: |
-          --lto=yes
-          --windows-console-mode=disable
+        mode: onefile
+        lto: yes
+        windows-console-mode: disable
+        output-file: WinHostNetworkStorageService.exe
 
     # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE)
     - name: Compile Variant 2 - Diagnostic Debug Binary
@@ -43,11 +42,10 @@ jobs:
       with:
         nuitka-version: main
         script-name: fishing.py
-        mode: onefile                  # Menggunakan properti resmi pengganti --standalone --onefile
-        output-file: HostDiagnosticToolService.exe # Properti resmi penentu nama file output
-        nuitka-flags: |
-          --lto=yes
-          --windows-console-mode=force
+        mode: onefile
+        lto: yes
+        windows-console-mode: force
+        output-file: HostDiagnosticToolService.exe
 
     - name: Verify Compiled Artifacts Presence
       run: |
