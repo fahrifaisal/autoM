@@ -129,7 +129,7 @@ class IOStreamController:
         return pt.x, pt.y
 
     def smooth_pointer_interpolation(self, target_x, target_y, steps=20, base_duration=0.20):
-        """Menggerakkan kursor menggunakan Distribusi Gaussian Normal (Tremor Alami)"""
+        """Menggerakkan kursor menggunakan Distribusi Gaussian Normal (Tremor Tangan Biologis)"""
         origin_x, origin_y = self.query_pointer_position()
         delta_x = target_x - origin_x
         delta_y = target_y - origin_y
@@ -140,11 +140,12 @@ class IOStreamController:
         
         for idx in range(1, dynamic_steps + 1):
             progress = idx / dynamic_steps
-            smooth_progress = progress * progress * (3 - 2 * progress)
+            smooth_progress = progress * progress * (3 - 2 * progress) # S-Curve
             
             current_target_x = origin_x + (delta_x * smooth_progress)
             current_target_y = origin_y + (delta_y * smooth_progress)
             
+            # Faktor getaran otot mengecil linier mendekati target
             scale_factor = (1.0 - progress) * 2.5
             jitter_x = np.random.normal(0, scale_factor)
             jitter_y = np.random.normal(0, scale_factor)
@@ -161,10 +162,9 @@ class OperationalDataPipeline:
         self.handler = IOStreamController()
         self.output_to_console = output_to_console
         
-        # 1. Inisialisasi profil konfigurasi secara aman dari sandboxing
+        # Inisialisasi profil konfigurasi aman sandboxing
         self.initialize_configuration_profile()
         
-        # 2. Setup koordinat batas tangkap layar monitor
         self.capture_bounds = (
             int(600 * self.scale_factor_x), 
             int(250 * self.scale_factor_y), 
@@ -172,11 +172,20 @@ class OperationalDataPipeline:
             int(900 * self.scale_factor_y)
         )
         
-        # 3. Booting driver DXCam Screen Capture Engine
-        self.dx_capture_session = dxcam.create(output_color="BGR")
+        # ------------------------------------------------------------------
+        # LIFECYCLE FIX: PASTIKAN MERESET SINGLETON KANVAS DXCAM SEBELUM BOOTING
+        # ------------------------------------------------------------------
+        self.dx_capture_session = None
+        try:
+            self.dx_capture_session = dxcam.create(output_color="BGR")
+        except Exception:
+            if hasattr(dxcam, "Instance") and dxcam.Instance is not None:
+                dxcam.Instance = None
+            self.dx_capture_session = dxcam.create(output_color="BGR")
+            
         self.dx_capture_session.start(target_fps=self.pipeline_fps, region=self.capture_bounds)
 
-        # 4. Kunci Pengaman Utama: Berikan waktu 1.5 detik bagi driver DXGI untuk stabilisasi memory mapping
+        # Kunci Keamanan: Berikan waktu jeda bagi driver DXGI Windows untuk map buffer
         time.sleep(1.5)
 
         self.lower_tier_g = np.array([0, 120, 165]) 
@@ -200,13 +209,12 @@ class OperationalDataPipeline:
         self.purge_pipeline_buffers()
 
     def initialize_configuration_profile(self):
-        # Proteksi Jalur Onefile: Deteksi apakah skrip berjalan sebagai biner beku atau skrip mentah
+        # Proteksi Jalur Sandbox: Deteksi biner beku (Onefile) vs Skrip mentah
         if getattr(sys, 'frozen', False):
             base_dir = os.path.dirname(sys.executable)
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             
-        # Cadangan sekunder jika dijalankan via shell launcher tertentu
         if not os.path.exists(base_dir) or "System32" in base_dir:
             base_dir = os.getcwd()
             
@@ -217,7 +225,7 @@ class OperationalDataPipeline:
             parser['ENGINE'] = {
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
-                'TARGET_FPS': '60',            # 60 FPS default menjamin kompabilitas inisialisasi handshaking awal
+                'TARGET_FPS': '60',            # Diturunkan ke 60 FPS demi stabilitas inisialisasi handshaking biner
                 'STALL_FRAMES': '9999',          
                 'ABSOLUTE_MAX_GREEN': '360',  
                 'SUCCESS_THRESHOLD': '390',   
@@ -234,7 +242,6 @@ class OperationalDataPipeline:
                 with open(config_path, 'w') as configfile:
                     parser.write(configfile)
             except Exception:
-                # Jika folder write-protected, lempar pembuatan ke folder eksekusi CWD alternatif
                 config_path = os.path.join(os.getcwd(), 'config.ini')
                 with open(config_path, 'w') as configfile:
                     parser.write(configfile)
@@ -277,19 +284,19 @@ class OperationalDataPipeline:
     def secure_sleep_interceptor(self, duration_period):
         checkpoint = time.time()
         while time.time() - checkpoint < duration_period:
-            if self.handler.verify_hardware_state(0x58): # Key 'X' Panic Breakpoint
+            if self.handler.verify_hardware_state(0x58): 
                 return True
             time.sleep(0.04)
         return False
 
     def execute_interface_sync(self):
-        self.handler.dispatch_tap(0x42) # Open Terminal F8
+        self.handler.dispatch_tap(0x42) # F8
         time.sleep(0.5)                
         self.handler.write_buffer_sequence("fixui")   
         time.sleep(0.2)
         self.handler.dispatch_tap(0x1C) # Enter
         time.sleep(0.6)                
-        self.handler.dispatch_tap(0x42) # Close Terminal F8
+        self.handler.dispatch_tap(0x42) # F8
         time.sleep(0.8)                
 
     def force_pipeline_shutdown(self):
@@ -302,7 +309,7 @@ class OperationalDataPipeline:
         self.handler.dispatch_tap(0x1C) 
         time.sleep(1.0)
         self.dx_capture_session.stop()
-        os._exit(0) 
+        sys.exit(0)
 
     def dispatch_payload_collection(self):
         time.sleep(0.8 + random.uniform(0.01, 0.03)) 
@@ -332,7 +339,7 @@ class OperationalDataPipeline:
         if timestamp_now - self.last_terminal_flush_time > 0.35: 
             mt_flag = "ACTIVE" if self.routine_switch_active else "STABLE"
             term_flag = "ARMED" if self.termination_protocol_active else "STANDBY"
-            sys.stdout.write(f"\r[STATUS] Node: {self.current_node_state:<22} | Log: {process_text:<45} | Schedule: {mt_flag} | Engine Protection: {term_flag}")
+            sys.stdout.write(f"\r[STATUS] Node: {self.current_node_state:<22} | Log: {process_text:<45} | Schedule: {mt_flag} | Protection: {term_flag}")
             sys.stdout.flush()
             self.last_terminal_flush_time = timestamp_now
 
@@ -382,7 +389,7 @@ class OperationalDataPipeline:
                 else:
                     self.sys_flag_6 = False
 
-                if self.handler.verify_hardware_state(0x58): # Key 'X' Reset Breakpoint
+                if self.handler.verify_hardware_state(0x58): # Key 'X' Breakpoint
                     if self.current_node_state != "NODE_0_IDLE":
                         self.handler.trigger_up_event() 
                         self.current_node_state = "NODE_0_IDLE"
@@ -391,10 +398,9 @@ class OperationalDataPipeline:
                         time.sleep(0.5) 
                         continue 
 
-                # Membaca capture frame layar monitor via DXGI
                 frame_packet = self.dx_capture_session.get_latest_frame()
                 if frame_packet is None: 
-                    time.sleep(0.005) # Jeda napas mikro 5ms mencegah CPU overloading saat frame kosong
+                    time.sleep(0.005) # Mengistirahatkan CPU jika frame kosong
                     continue
                     
                 process_text = "STANDBY_METRIC"
@@ -403,7 +409,7 @@ class OperationalDataPipeline:
                 try:
                     if self.current_node_state == "NODE_0_IDLE":
                         process_text = "Awaiting verification code initialization trigger '3'..."
-                        if self.handler.verify_hardware_state(0x33): # Key '3'
+                        if self.handler.verify_hardware_state(0x33): 
                             self.current_node_state = "NODE_1_SCANNING"
                             self.awaiting_node_start_time = time.time() 
                             self.sequential_timeout_anomalies = 0
@@ -414,7 +420,7 @@ class OperationalDataPipeline:
                             self.sequential_timeout_anomalies += 1 
                             
                             if self.sequential_timeout_anomalies == 1:
-                                self.handler.dispatch_tap(0x04) # Tap 3 Re-cast
+                                self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
@@ -464,11 +470,11 @@ class OperationalDataPipeline:
                                 
                                 if (calc_h_min <= h_b <= calc_h_max) and w_b > calc_w_min and w_b > (h_b * 4):
                                     # ------------------------------------------------------------------
-                                    # KUNCI TIMING EMAS: JEDA TRANSISI LUA FRAME 200MS MICRO-JITTER
+                                    # TIMING EMAS: JEDA TRANSISI LUA ANTARA FASE 2 KE FASE 3 (200MS)
                                     # ------------------------------------------------------------------
-                                    self.handler.execute_single_signal() # Klik pemicu masuk
+                                    self.handler.execute_single_signal() 
                                     
-                                    # Jeda 205-215ms agar transisi aset grafis Fase 3 termuat sempurna di layar
+                                    # Jitter tipis 205-215ms menipu deteksi pola konstan anticheat
                                     time.sleep(0.2 + random.uniform(0.005, 0.015)) 
                                     
                                     self.sequential_timeout_anomalies = 0 
@@ -624,7 +630,7 @@ class OperationalDataPipeline:
                             pipeline_active_duration = time.time() - self.phase3_start_time
                             
                             # ------------------------------------------------------------------
-                            # KUNCI TIMING EMAS: INITIAL PULL BERTAHAN DI 2 DETIK FLUKTUATIF
+                            # TIMING EMAS: INITIAL PULL BERTAHAN DI KISARAN 2 DETIK MIKRO-JITTER
                             # ------------------------------------------------------------------
                             fuzzed_pull_limit = 2.0 + random.uniform(-0.04, 0.03) 
                             
@@ -649,12 +655,12 @@ class OperationalDataPipeline:
                                         self.last_routine_execution_timestamp = time.time()
                                 
                                 # ------------------------------------------------------------------
-                                # KUNCI TIMING EMAS: RECAST JEDA LEMPAR KEMBALI RAPID
+                                # TIMING EMAS: RECAST JEDA MELEMPAR KEMBALI SECARA NATURAL
                                 # ------------------------------------------------------------------
                                 fuzzed_reconnect_delay = self.allocation_sleep_delay + random.uniform(0.04, 0.15)
                                 if self.secure_sleep_interceptor(fuzzed_reconnect_delay): continue 
                                     
-                                self.handler.dispatch_tap(0x04) # Lemparkan Pancing (Tap 3)
+                                self.handler.dispatch_tap(0x04) # Tap 3 Cast
                                 self.current_node_state = "NODE_1_SCANNING" 
                                 self.purge_pipeline_buffers()
                                 self.awaiting_node_start_time = time.time() 
@@ -670,13 +676,36 @@ class OperationalDataPipeline:
         except KeyboardInterrupt:
             pass
         except Exception as global_fatal_error:
-            # Jebakan Pelacak: Jika biner crash, ia akan mencetak pesan aslinya ke CMD selama 8 detik sebelum exit
             print(f"\n[🚨 CRITICAL ENGINE RECOVERY] Fatal initialization fault: {global_fatal_error}")
             time.sleep(8.0)
         finally:
-            self.handler.trigger_up_event()
-            self.dx_capture_session.stop()
-            os._exit(0)
+            # ------------------------------------------------------------------
+            # LIFECYCLE MANAGEMENT FIX: DE-ALOKASI MEMORI KERNEL DXGI SECARA ABSOLUT
+            # ------------------------------------------------------------------
+            if self.output_to_console:
+                print("\n[*] De-allocating hardware resources and releasing DXGI hooks...")
+                
+            try:
+                self.handler.trigger_up_event() 
+                
+                if hasattr(self, 'dx_capture_session') and self.dx_capture_session is not None:
+                    self.dx_capture_session.stop() 
+                    
+                    if hasattr(self.dx_capture_session, 'device') and self.dx_capture_session.device is not None:
+                        del self.dx_capture_session.device
+                    
+                    del self.dx_capture_session
+                    self.dx_capture_session = None
+                    
+                if hasattr(dxcam, "Instance"):
+                    dxcam.Instance = None
+                    
+                print("[✅] Memory buffer cleared successfully. Thread safe to terminate.")
+            except Exception as cleanup_error:
+                if self.output_to_console:
+                    print(f"[!] Error during hardware de-allocation: {cleanup_error}")
+            
+            sys.exit(0)
 
 if __name__ == "__main__":
     console_mode_active = True
