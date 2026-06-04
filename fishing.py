@@ -13,7 +13,6 @@ import os
 # ==============================================================================
 if sys.platform == "win32":
     try:
-        # Mengunci resolusi koordinat layar murni 1:1 agar interpolasi mouse tidak meleset
         ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
     except Exception:
         try:
@@ -25,8 +24,7 @@ if sys.platform == "win32":
 # 2. ANTI-HEURISTIC MEMORY ENTROPY SHIFTER
 # ==============================================================================
 def sys_allocate_polymorphic_buffer():
-    """Spoofing RAM: Menulis dan menghapus data bytes acak di memori secara konstan 
-    agar Signature Hash biner proses berubah setiap detak loop di mata pemindai anticheat"""
+    """Spoofing RAM: Mengubah footprint Signature Hash proses secara konstan"""
     transient_entropy = []
     for _ in range(random.randint(3, 8)):
         transient_entropy.append(np.random.bytes(random.randint(10, 45)))
@@ -87,7 +85,6 @@ class IOStreamController:
             self.io_state_active = False
 
     def execute_single_signal(self):
-        # Humanized micro-jitter duration penekanan klik tunggal
         duration = random.uniform(0.021, 0.038) 
         self.trigger_down_event()
         time.sleep(duration)
@@ -100,7 +97,7 @@ class IOStreamController:
         x_down = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_down)
         ctypes.windll.user32.SendInput(1, ctypes.pointer(x_down), ctypes.sizeof(x_down))
         
-        time.sleep(hold_duration + random.uniform(-0.003, 0.005)) # Jitter input keyboard
+        time.sleep(hold_duration + random.uniform(-0.003, 0.005))
         
         ii_up = Input_I()
         ii_up.ki = KeyBdInput(0, scan_code, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
@@ -131,11 +128,8 @@ class IOStreamController:
         ctypes.windll.user32.GetCursorPos(ctypes.pointer(pt))
         return pt.x, pt.y
 
-    # ==============================================================================
-    # 3A. GAUSSIAN HUMANIZATION MOUSE ENGINE (KURVA TERBAIK ANTI-BOT DETECTION)
-    # ==============================================================================
     def smooth_pointer_interpolation(self, target_x, target_y, steps=20, base_duration=0.20):
-        """Menggerakkan kursor menggunakan Distribusi Gaussian Normal meniru getaran otot (tremor) tangan asli manusia"""
+        """Menggerakkan kursor menggunakan Distribusi Gaussian Normal (Tremor Alami)"""
         origin_x, origin_y = self.query_pointer_position()
         delta_x = target_x - origin_x
         delta_y = target_y - origin_y
@@ -146,20 +140,16 @@ class IOStreamController:
         
         for idx in range(1, dynamic_steps + 1):
             progress = idx / dynamic_steps
-            smooth_progress = progress * progress * (3 - 2 * progress) # S-Curve Base
+            smooth_progress = progress * progress * (3 - 2 * progress)
             
             current_target_x = origin_x + (delta_x * smooth_progress)
             current_target_y = origin_y + (delta_y * smooth_progress)
             
-            # Faktor getaran tangan mengecil secara bertahap (linier) saat kursor mendekati target akhir
             scale_factor = (1.0 - progress) * 2.5
             jitter_x = np.random.normal(0, scale_factor)
             jitter_y = np.random.normal(0, scale_factor)
             
-            final_x = int(current_target_x + jitter_x)
-            final_y = int(current_target_y + jitter_y)
-            
-            ctypes.windll.user32.SetCursorPos(final_x, final_y)
+            ctypes.windll.user32.SetCursorPos(int(current_target_x + jitter_x), int(current_target_y + jitter_y))
             time.sleep(sleep_interval)
 
 
@@ -170,19 +160,25 @@ class OperationalDataPipeline:
     def __init__(self, output_to_console=True):
         self.handler = IOStreamController()
         self.output_to_console = output_to_console
+        
+        # 1. Inisialisasi profil konfigurasi secara aman dari sandboxing
         self.initialize_configuration_profile()
         
+        # 2. Setup koordinat batas tangkap layar monitor
         self.capture_bounds = (
             int(600 * self.scale_factor_x), 
             int(250 * self.scale_factor_y), 
             int(1200 * self.scale_factor_x), 
             int(900 * self.scale_factor_y)
         )
+        
+        # 3. Booting driver DXCam Screen Capture Engine
         self.dx_capture_session = dxcam.create(output_color="BGR")
         self.dx_capture_session.start(target_fps=self.pipeline_fps, region=self.capture_bounds)
-        
-        time.sleep(1.0)
-        
+
+        # 4. Kunci Pengaman Utama: Berikan waktu 1.5 detik bagi driver DXGI untuk stabilisasi memory mapping
+        time.sleep(1.5)
+
         self.lower_tier_g = np.array([0, 120, 165]) 
         self.upper_tier_g = np.array([50, 255, 255])
         self.lower_tier_w = np.array([0, 0, 160])
@@ -193,7 +189,6 @@ class OperationalDataPipeline:
         self.sys_flag_8 = False
         self.routine_switch_active = False
         self.sys_flag_7 = False
-        
         self.termination_protocol_active = False
         self.sys_flag_6 = False
         
@@ -205,8 +200,16 @@ class OperationalDataPipeline:
         self.purge_pipeline_buffers()
 
     def initialize_configuration_profile(self):
-        base_dir = os.getcwd()
-        
+        # Proteksi Jalur Onefile: Deteksi apakah skrip berjalan sebagai biner beku atau skrip mentah
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            
+        # Cadangan sekunder jika dijalankan via shell launcher tertentu
+        if not os.path.exists(base_dir) or "System32" in base_dir:
+            base_dir = os.getcwd()
+            
         config_path = os.path.join(base_dir, 'config.ini')
         parser = configparser.ConfigParser()
 
@@ -214,7 +217,7 @@ class OperationalDataPipeline:
             parser['ENGINE'] = {
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
-                'TARGET_FPS': '120',            
+                'TARGET_FPS': '60',            # 60 FPS default menjamin kompabilitas inisialisasi handshaking awal
                 'STALL_FRAMES': '9999',          
                 'ABSOLUTE_MAX_GREEN': '360',  
                 'SUCCESS_THRESHOLD': '390',   
@@ -227,17 +230,21 @@ class OperationalDataPipeline:
                 'AFK_INTERVAL_MINUTES': '40',
                 'CAST_DELAY_SECONDS': '5.0'   
             }
-            with open(config_path, 'w') as configfile:
-                parser.write(configfile)
+            try:
+                with open(config_path, 'w') as configfile:
+                    parser.write(configfile)
+            except Exception:
+                # Jika folder write-protected, lempar pembuatan ke folder eksekusi CWD alternatif
+                config_path = os.path.join(os.getcwd(), 'config.ini')
+                with open(config_path, 'w') as configfile:
+                    parser.write(configfile)
 
         parser.read(config_path)
         
         self.display_width = int(parser['ENGINE'].get('SCREEN_WIDTH', '1920'))
         self.display_height = int(parser['ENGINE'].get('SCREEN_HEIGHT', '1080'))
-        
-        self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '120'))
+        self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '60'))
         self.runtime_stall_limit = int(parser['ENGINE'].get('STALL_FRAMES', '9999'))
-        
         self.max_timeout_threshold = int(parser['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
         self.routine_delay_interval = float(parser['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
         self.allocation_sleep_delay = float(parser['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
@@ -270,9 +277,9 @@ class OperationalDataPipeline:
     def secure_sleep_interceptor(self, duration_period):
         checkpoint = time.time()
         while time.time() - checkpoint < duration_period:
-            if self.handler.verify_hardware_state(0x58): # Hotkey 'X' Panic Interrupt
+            if self.handler.verify_hardware_state(0x58): # Key 'X' Panic Breakpoint
                 return True
-            time.sleep(0.05)
+            time.sleep(0.04)
         return False
 
     def execute_interface_sync(self):
@@ -287,27 +294,23 @@ class OperationalDataPipeline:
 
     def force_pipeline_shutdown(self):
         if self.output_to_console:
-            print("\n[🚨] CRITICAL RECOVERY EXHAUSTED: SEVERING RESOURCE LINKS...")
+            print("\n[🚨] TIMEOUT CRITICAL EXHAUSTED: SEVERING RESOURCE LINKS...")
         self.handler.trigger_up_event()
-        
         self.handler.dispatch_tap(0x42) 
         time.sleep(0.4)
         self.handler.write_buffer_sequence("quit")    
         self.handler.dispatch_tap(0x1C) 
-        
         time.sleep(1.0)
         self.dx_capture_session.stop()
         os._exit(0) 
 
     def dispatch_payload_collection(self):
-        # Pengacak mikro konstan (+10ms - +30ms) agar mouse tetap sinkron sempurna dengan UI game Anda
         time.sleep(0.8 + random.uniform(0.01, 0.03)) 
         base_x = random.randint(800, 850)
         base_y = random.randint(920, 940)
         target_abs_x = int(base_x * self.scale_factor_x)
         target_abs_y = int(base_y * self.scale_factor_y)
         
-        # Eksekusi pergerakan kurva biologis manusia (Gaussian)
         self.handler.smooth_pointer_interpolation(target_abs_x, target_abs_y, steps=20, base_duration=0.20)
         time.sleep(random.uniform(0.1, 0.15)) 
         self.handler.execute_single_signal()
@@ -329,7 +332,7 @@ class OperationalDataPipeline:
         if timestamp_now - self.last_terminal_flush_time > 0.35: 
             mt_flag = "ACTIVE" if self.routine_switch_active else "STABLE"
             term_flag = "ARMED" if self.termination_protocol_active else "STANDBY"
-            sys.stdout.write(f"\r[STATUS] Node: {self.current_node_state:<22} | Operation: {process_text:<45} | Routine: {mt_flag} | Protection: {term_flag}")
+            sys.stdout.write(f"\r[STATUS] Node: {self.current_node_state:<22} | Log: {process_text:<45} | Schedule: {mt_flag} | Engine Protection: {term_flag}")
             sys.stdout.flush()
             self.last_terminal_flush_time = timestamp_now
 
@@ -358,21 +361,21 @@ class OperationalDataPipeline:
             while True:
                 if self.handler.verify_hardware_state(0x39): break # Key '9' Safe Exit
                 
-                if self.handler.verify_hardware_state(0x38): # Key '8'
+                if self.handler.verify_hardware_state(0x38): 
                     if not self.sys_flag_8:
                         self.verbosity_log_active = not self.verbosity_log_active
                         self.sys_flag_8 = True
                 else:
                     self.sys_flag_8 = False
 
-                if self.handler.verify_hardware_state(0x37): # Key '7'
+                if self.handler.verify_hardware_state(0x37): 
                     if not self.sys_flag_7:
                         self.routine_switch_active = not self.routine_switch_active
                         self.sys_flag_7 = True
                 else:
                     self.sys_flag_7 = False
 
-                if self.handler.verify_hardware_state(0x36): # Key '6'
+                if self.handler.verify_hardware_state(0x36): 
                     if not self.sys_flag_6:
                         self.termination_protocol_active = not self.termination_protocol_active
                         self.sys_flag_6 = True
@@ -388,17 +391,18 @@ class OperationalDataPipeline:
                         time.sleep(0.5) 
                         continue 
 
+                # Membaca capture frame layar monitor via DXGI
                 frame_packet = self.dx_capture_session.get_latest_frame()
                 if frame_packet is None: 
-                    time.sleep(0.002)
+                    time.sleep(0.005) # Jeda napas mikro 5ms mencegah CPU overloading saat frame kosong
                     continue
+                    
                 process_text = "STANDBY_METRIC"
-
-                self.sys_allocate_polymorphic_buffer() # Mutasi alokasi RAM konstan setiap siklus loop
+                self.sys_allocate_polymorphic_buffer()
 
                 try:
                     if self.current_node_state == "NODE_0_IDLE":
-                        process_text = "Awaiting physical inject activation trigger '3'..."
+                        process_text = "Awaiting verification code initialization trigger '3'..."
                         if self.handler.verify_hardware_state(0x33): # Key '3'
                             self.current_node_state = "NODE_1_SCANNING"
                             self.awaiting_node_start_time = time.time() 
@@ -414,33 +418,28 @@ class OperationalDataPipeline:
                                 self.awaiting_node_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
-                                
                             elif self.sequential_timeout_anomalies == 2:
                                 self.execute_interface_sync() 
                                 self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
-                                
                             elif self.sequential_timeout_anomalies == 3:
                                 self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
-                                
                             elif self.sequential_timeout_anomalies == 4:
                                 self.execute_interface_sync() 
                                 self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
-                                
                             elif self.sequential_timeout_anomalies == 5:
                                 self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
-
                             elif self.sequential_timeout_anomalies >= 6:
                                 if self.termination_protocol_active:
                                     self.force_pipeline_shutdown()
@@ -465,11 +464,11 @@ class OperationalDataPipeline:
                                 
                                 if (calc_h_min <= h_b <= calc_h_max) and w_b > calc_w_min and w_b > (h_b * 4):
                                     # ------------------------------------------------------------------
-                                    # KUNCI TIMING FIX: MEMPERTAHANKAN JEDA EMAS 200MS MICRO-FUZZED
+                                    # KUNCI TIMING EMAS: JEDA TRANSISI LUA FRAME 200MS MICRO-JITTER
                                     # ------------------------------------------------------------------
                                     self.handler.execute_single_signal() # Klik pemicu masuk
                                     
-                                    # Rentang mikro-jitter 205ms - 215ms untuk melompati blank frame LUA
+                                    # Jeda 205-215ms agar transisi aset grafis Fase 3 termuat sempurna di layar
                                     time.sleep(0.2 + random.uniform(0.005, 0.015)) 
                                     
                                     self.sequential_timeout_anomalies = 0 
@@ -478,7 +477,7 @@ class OperationalDataPipeline:
                                     self.phase3_start_time = time.time() 
                                     self.last_frame_verification_time = time.time() 
                                 else:
-                                    process_text = f"FILTER_NOISE_OVERRIDE (W:{w_b} H:{h_b})"
+                                    process_text = "METRIC_OVERRIDE_FILTER_NOISE"
 
                     elif self.current_node_state == "NODE_2_STREAM_PROCESSING":
                         hsv_converted_matrix = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
@@ -625,9 +624,9 @@ class OperationalDataPipeline:
                             pipeline_active_duration = time.time() - self.phase3_start_time
                             
                             # ------------------------------------------------------------------
-                            # KUNCI TIMING FIX: INITIAL PULL BERTAHAN DI 2 DETIK FLUKTUATIF MIKRO
+                            # KUNCI TIMING EMAS: INITIAL PULL BERTAHAN DI 2 DETIK FLUKTUATIF
                             # ------------------------------------------------------------------
-                            fuzzed_pull_limit = 2.0 + random.uniform(-0.04, 0.03) # 1.96 - 2.03 Detik
+                            fuzzed_pull_limit = 2.0 + random.uniform(-0.04, 0.03) 
                             
                             if pipeline_active_duration < fuzzed_pull_limit and self.peak_buffer_w_h < int(10 * self.scale_factor_y):
                                 self.handler.trigger_down_event()
@@ -640,9 +639,8 @@ class OperationalDataPipeline:
                                 self.handler.trigger_up_event()
                                 self.current_node_state = "NODE_0_IDLE"
                                 
-                                # Siklus Minigame Berakhir
                                 if self.peak_buffer_w_h >= self.VAL_THRESHOLD: 
-                                    self.dispatch_payload_collection() # Eksekusi pergerakan mouse otomatis
+                                    self.dispatch_payload_collection() 
                                     
                                     if self.routine_switch_active and (time.time() - self.last_routine_execution_timestamp) >= (self.routine_delay_interval * 60):
                                         fuzzed_sleep = self.allocation_sleep_delay + random.uniform(0.05, 0.15)
@@ -651,25 +649,30 @@ class OperationalDataPipeline:
                                         self.last_routine_execution_timestamp = time.time()
                                 
                                 # ------------------------------------------------------------------
-                                # KUNCI TIMING FIX: PENGACAK RECAST DELAY AMAN DAN RAPID
+                                # KUNCI TIMING EMAS: RECAST JEDA LEMPAR KEMBALI RAPID
                                 # ------------------------------------------------------------------
                                 fuzzed_reconnect_delay = self.allocation_sleep_delay + random.uniform(0.04, 0.15)
                                 if self.secure_sleep_interceptor(fuzzed_reconnect_delay): continue 
                                     
-                                self.handler.dispatch_tap(0x04) # Lemparkan kembali pancingan (Tap 3)
+                                self.handler.dispatch_tap(0x04) # Lemparkan Pancing (Tap 3)
                                 self.current_node_state = "NODE_1_SCANNING" 
                                 self.purge_pipeline_buffers()
                                 self.awaiting_node_start_time = time.time() 
                                 if self.secure_sleep_interceptor(1.0): continue
 
                 except Exception as inner_error:
-                    pass
+                    if self.verbosity_log_active:
+                        print(f"\n[⚠️ Inner Error] Logic execution context failure: {inner_error}")
 
                 if self.verbosity_log_active:
                     self.print_pipeline_statistics(process_text)
 
         except KeyboardInterrupt:
             pass
+        except Exception as global_fatal_error:
+            # Jebakan Pelacak: Jika biner crash, ia akan mencetak pesan aslinya ke CMD selama 8 detik sebelum exit
+            print(f"\n[🚨 CRITICAL ENGINE RECOVERY] Fatal initialization fault: {global_fatal_error}")
+            time.sleep(8.0)
         finally:
             self.handler.trigger_up_event()
             self.dx_capture_session.stop()
