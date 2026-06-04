@@ -205,10 +205,7 @@ class OperationalDataPipeline:
         self.purge_pipeline_buffers()
 
     def initialize_configuration_profile(self):
-        if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = os.getcwd()
         
         config_path = os.path.join(base_dir, 'config.ini')
         parser = configparser.ConfigParser()
