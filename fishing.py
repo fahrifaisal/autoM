@@ -175,7 +175,7 @@ class OperationalDataPipeline:
         self.dx_capture_session = None
         try:
             # Mengalokasikan 8 sirkular RAM buffer tingkat hardware untuk mengunci kecepatan tinggi
-            self.dx_capture_session = dxcam.create(output_color="BGR", max_buffer_size=8)
+            self.dx_capture_session = dxcam.create(output_color="BGR", max_buffer_len=8)
         except Exception as primary_gpu_fault:
             if self.output_to_console:
                 print(f"\n[⚠️] Native API Link Refused: {primary_gpu_fault}. Swapping to Output Channel-0...")
@@ -226,7 +226,7 @@ class OperationalDataPipeline:
             parser['ENGINE'] = {
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
-                'TARGET_FPS': '120',            
+                'TARGET_FPS': '60',            
                 'STALL_FRAMES': '9999',          
                 'ABSOLUTE_MAX_GREEN': '360',  
                 'SUCCESS_THRESHOLD': '390',   
@@ -251,7 +251,7 @@ class OperationalDataPipeline:
         
         self.display_width = int(parser['ENGINE'].get('SCREEN_WIDTH', '1920'))
         self.display_height = int(parser['ENGINE'].get('SCREEN_HEIGHT', '1080'))
-        self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '120'))
+        self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '60'))
         self.runtime_stall_limit = int(parser['ENGINE'].get('STALL_FRAMES', '9999'))
         self.max_timeout_threshold = int(parser['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
         self.routine_delay_interval = float(parser['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
