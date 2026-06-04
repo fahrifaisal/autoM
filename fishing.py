@@ -180,7 +180,9 @@ class OperationalDataPipeline:
         )
         self.dx_capture_session = dxcam.create(output_color="BGR")
         self.dx_capture_session.start(target_fps=self.pipeline_fps, region=self.capture_bounds)
-
+        
+        time.sleep(1.0)
+        
         self.lower_tier_g = np.array([0, 120, 165]) 
         self.upper_tier_g = np.array([50, 255, 255])
         self.lower_tier_w = np.array([0, 0, 160])
@@ -390,7 +392,9 @@ class OperationalDataPipeline:
                         continue 
 
                 frame_packet = self.dx_capture_session.get_latest_frame()
-                if frame_packet is None: continue
+                if frame_packet is None: 
+                    time.sleep(0.002)
+                    continue
                 process_text = "STANDBY_METRIC"
 
                 self.sys_allocate_polymorphic_buffer() # Mutasi alokasi RAM konstan setiap siklus loop
