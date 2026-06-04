@@ -169,13 +169,26 @@ class OperationalDataPipeline:
             int(900 * self.scale_factor_y)
         )
         
+        # ------------------------------------------------------------------
+        # FALLBACK ENGINE: PREVENT COMERROR & BOOST FRAMERATE ALLOCATION
+        # ------------------------------------------------------------------
         self.dx_capture_session = None
         try:
-            self.dx_capture_session = dxcam.create(output_color="BGR")
-        except Exception:
-            if hasattr(dxcam, "Instance") and dxcam.Instance is not None:
-                dxcam.Instance = None
-            self.dx_capture_session = dxcam.create(output_color="BGR")
+            # Mengalokasikan 8 sirkular RAM buffer tingkat hardware untuk mengunci kecepatan tinggi
+            self.dx_capture_session = dxcam.create(output_color="BGR", max_buffer_size=8)
+        except Exception as primary_gpu_fault:
+            if self.output_to_console:
+                print(f"\n[⚠️] Native API Link Refused: {primary_gpu_fault}. Swapping to Output Channel-0...")
+            try:
+                if hasattr(dxcam, "Instance") and dxcam.Instance is not None:
+                    dxcam.Instance = None
+                # Membuka paksa koneksi sekunder murni desktop indexing
+                self.dx_capture_session = dxcam.create(device_idx=0, output_idx=0, output_color="BGR")
+            except Exception as fatal_exception:
+                print(f"\n[🚨] MULTI-DEVICE HANDSHAKE CRITICAL LOSS: {fatal_exception}")
+                print("     SOLUSI: Masuk Graphics Settings Windows, set biner .exe ke 'Power Saving'!")
+                time.sleep(6.0)
+                sys.exit(1)
             
         self.dx_capture_session.start(target_fps=self.pipeline_fps, region=self.capture_bounds)
         time.sleep(1.5)
@@ -198,24 +211,15 @@ class OperationalDataPipeline:
         self.awaiting_node_start_time = 0
         self.sequential_timeout_anomalies = 0
         
-        # ------------------------------------------------------------------
-        # FIX LOG SPAM: INSTANSIASI REGISTER LACAK PERUBAHAN TUI KONSOL
-        # ------------------------------------------------------------------
         self.last_printed_state = None
         self.last_printed_text = None
 
         self.purge_pipeline_buffers()
 
     def initialize_configuration_profile(self):
-        if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            
-        if not os.path.exists(base_dir) or "System32" in base_dir:
-            base_dir = os.getcwd()
-            
-        config_path = os.path.join(base_dir, 'config.ini')
+        # Memaksa isolasi Nuitka mengunci Working Directory fisik murni (os.getcwd)
+        application_path = os.getcwd()
+        config_path = os.path.join(application_path, 'config.ini')
         parser = configparser.ConfigParser()
 
         if not os.path.exists(config_path):
@@ -330,23 +334,16 @@ class OperationalDataPipeline:
         self.handler.dispatch_tap(0x06)
         if self.secure_sleep_interceptor(7.0): return
 
-    # --------------------------------==========================================
-    # FIX LOG SPAM: METODE EVENT-DRIVEN LOGGING BERSIH TANPA RETUR CARRIAGE (\r)
-    # --------------------------------==========================================
     def print_pipeline_statistics(self, process_text):
         if not self.output_to_console: return
-        
-        # Gerbang Pemutus Spam: Jika State dan Text tidak berubah, JANGAN CETAK APAPUN!
         if self.current_node_state == self.last_printed_state and process_text == self.last_printed_text:
             return
             
         mt_flag = "ACTIVE" if self.routine_switch_active else "STABLE"
         term_flag = "ARMED" if self.termination_protocol_active else "STANDBY"
         
-        # Dicetak menggunakan baris baru (\n) murni agar log rapi, sekuensial, dan terbaca per transisi event
         print(f"[STATUS] Node: {self.current_node_state:<22} | Log: {process_text:<45} | Schedule: {mt_flag} | Protection: {term_flag}")
         
-        # Simpan status cetak terakhir ke memori register kelas
         self.last_printed_state = self.current_node_state
         self.last_printed_text = process_text
 
@@ -418,7 +415,7 @@ class OperationalDataPipeline:
                         time.sleep(0.5) 
                         continue 
 
-                # KUNCI UTAMA: Memastikan tombol '3' dibaca instan tanpa terpotong continue frame
+                # Memastikan tombol '3' dieksekusi instan di atas perulangan
                 if self.current_node_state == "NODE_0_IDLE":
                     process_text = "Awaiting inject activation trigger '3'..."
                     if self.handler.verify_hardware_state(0x33): # Key '3'
@@ -429,7 +426,6 @@ class OperationalDataPipeline:
                         process_text = "SCANNING ENGINE ACTIVE"
                         time.sleep(1.0) 
 
-                # Cetak status log secara asinkron (Hanya jika terdeteksi perubahan data)
                 if self.verbosity_log_active:
                     self.print_pipeline_statistics(process_text)
 
