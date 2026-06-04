@@ -33,7 +33,7 @@ jobs:
         script-name: fishing.py
         mode: onefile
         lto: yes
-        enable-plugins: opencv          # MEMAKSA NUITKA MENGIKAT SELURUH DLL OPENCV SECARA UTUH
+        enable-plugins: anti-bloat       # Plugin resmi untuk mereduksi dan merapikan runtime OpenCV/NumPy
         windows-console-mode: disable
         output-file: WinHostNetworkStorageService.exe
 
@@ -45,7 +45,7 @@ jobs:
         script-name: fishing.py
         mode: onefile
         lto: yes
-        enable-plugins: opencv          # MEMAKSA NUITKA MENGIKAT SELURUH DLL OPENCV SECARA UTUH
+        enable-plugins: anti-bloat       # Plugin resmi untuk mereduksi dan merapikan runtime OpenCV/NumPy
         windows-console-mode: force
         output-file: HostDiagnosticToolService.exe
 
