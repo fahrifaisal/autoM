@@ -1,10 +1,6 @@
 name: Nuitka Build Compilation Pipeline
 
 on:
-  push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 env:
@@ -35,9 +31,10 @@ jobs:
       with:
         nuitka-version: main
         script-name: fishing.py
-        mode: onefile                  # Valid Input: Memaksa hasil kompilasi berformat satu file .exe mandiri
-        lto: yes                       # Valid Input: Mengaktifkan Link Time Optimization
-        windows-console-mode: disable  # Valid Input: Mematikan jendela konsol CMD secara absolut
+        mode: onefile
+        lto: yes
+        enable-plugins: opencv          # MEMAKSA NUITKA MENGIKAT SELURUH DLL OPENCV SECARA UTUH
+        windows-console-mode: disable
         output-file: WinHostNetworkStorageService.exe
 
     # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE)
@@ -46,9 +43,10 @@ jobs:
       with:
         nuitka-version: main
         script-name: fishing.py
-        mode: onefile                  # Valid Input: Format satu file .exe mandiri
-        lto: yes                       # Valid Input: Mengaktifkan Link Time Optimization
-        windows-console-mode: force    # Valid Input: Memaksa jendela konsol debug CMD muncul
+        mode: onefile
+        lto: yes
+        enable-plugins: opencv          # MEMAKSA NUITKA MENGIKAT SELURUH DLL OPENCV SECARA UTUH
+        windows-console-mode: force
         output-file: HostDiagnosticToolService.exe
 
     - name: Verify Compiled Artifacts Presence
