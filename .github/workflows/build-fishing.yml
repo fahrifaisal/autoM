@@ -1,6 +1,10 @@
 name: Nuitka Build Compilation Pipeline
 
 on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 env:
@@ -25,39 +29,33 @@ jobs:
         python -m pip install --upgrade pip
         pip install numpy opencv-python dxcam configparser
 
-    # VARIANT 1: SILENT STEALTH BINARY (NON-CONSOLE / SENYAP MUTLAK)
-    - name: Compile Variant 1 - Silent Stealth Binary (Non-Console)
+    # VARIANT 1: SILENT STEALTH BINARY (NO-CONSOLE)
+    - name: Compile Variant 1 - Silent Stealth Binary
       uses: Nuitka/Nuitka-Action@main
       with:
         nuitka-version: main
         script-name: fishing.py
-        mode: standalone
+        mode: onefile                  # Valid Input: Memaksa hasil kompilasi berformat satu file .exe mandiri
+        lto: yes                       # Valid Input: Mengaktifkan Link Time Optimization
+        windows-console-mode: disable  # Valid Input: Mematikan jendela konsol CMD secara absolut
         output-file: WinHostNetworkStorageService.exe
-        extra-options: |
-          --onefile
-          --lto=yes
-          --windows-console-mode=disable
 
-    # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE / UNTUK TES TIMING)
-    - name: Compile Variant 2 - Diagnostic Debug Binary (With-Console)
+    # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE)
+    - name: Compile Variant 2 - Diagnostic Debug Binary
       uses: Nuitka/Nuitka-Action@main
       with:
         nuitka-version: main
         script-name: fishing.py
-        mode: standalone
+        mode: onefile                  # Valid Input: Format satu file .exe mandiri
+        lto: yes                       # Valid Input: Mengaktifkan Link Time Optimization
+        windows-console-mode: force    # Valid Input: Memaksa jendela konsol debug CMD muncul
         output-file: HostDiagnosticToolService.exe
-        extra-options: |
-          --onefile
-          --lto=yes
-          --windows-console-mode=force
 
-    # Verifikasi hasil kompilasi di folder output default Nuitka-Action (build/)
     - name: Verify Compiled Artifacts Presence
       run: |
-        if (Test-Path "build/WinHostNetworkStorageService.exe") { Write-Output "Stealth Binary Verified Successfully" } else { throw "Stealth Binary Missing" }
-        if (Test-Path "build/HostDiagnosticToolService.exe") { Write-Output "Debug Binary Verified Successfully" } else { throw "Debug Binary Missing" }
+        if (Test-Path "build/WinHostNetworkStorageService.exe") { Write-Output "Stealth Binary Verified" } else { throw "Stealth Binary Missing" }
+        if (Test-Path "build/HostDiagnosticToolService.exe") { Write-Output "Debug Binary Verified" } else { throw "Debug Binary Missing" }
 
-    # Mengompres dan mengunggah hasil menjadi berkas .zip yang bisa langsung diunduh
     - name: Upload Compiled Production Artifacts
       uses: actions/upload-artifact@v4
       with:
