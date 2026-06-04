@@ -1,4 +1,4 @@
-name: Nuitka Build Compilation Pipeline
+name: Nuitka-Fishing
 
 on:
   workflow_dispatch:
@@ -25,7 +25,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install numpy opencv-python dxcam configparser
 
-    # VARIANT 1: SILENT STEALTH BINARY (NO-CONSOLE)
+    # VARIANT 1: SILENT STEALTH BINARY (NO-CONSOLE / SENYAP RUNTIME)
     - name: Compile Variant 1 - Silent Stealth Binary
       uses: Nuitka/Nuitka-Action@main
       with:
@@ -33,11 +33,11 @@ jobs:
         script-name: fishing.py
         mode: onefile
         lto: yes
-        enable-plugins: anti-bloat       # Plugin resmi untuk mereduksi dan merapikan runtime OpenCV/NumPy
+        enable-plugins: anti-bloat
         windows-console-mode: disable
         output-file: WinHostNetworkStorageService.exe
 
-    # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE)
+    # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE / BISA LOG MONITOR)
     - name: Compile Variant 2 - Diagnostic Debug Binary
       uses: Nuitka/Nuitka-Action@main
       with:
@@ -45,7 +45,7 @@ jobs:
         script-name: fishing.py
         mode: onefile
         lto: yes
-        enable-plugins: anti-bloat       # Plugin resmi untuk mereduksi dan merapikan runtime OpenCV/NumPy
+        enable-plugins: anti-bloat
         windows-console-mode: force
         output-file: HostDiagnosticToolService.exe
 
