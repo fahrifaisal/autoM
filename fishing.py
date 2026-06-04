@@ -9,11 +9,11 @@ import configparser
 import os
 
 # ==============================================================================
-# 1. SYSTEM ENVIRONMENT STABILIZATION (DPI CORE LOCK RE-INSTATED)
+# 1. SYSTEM ENVIRONMENT STABILIZATION (DPI CORE LOCK)
 # ==============================================================================
 if sys.platform == "win32":
     try:
-        # Mengembalikan pengunci skala 1:1 tanpa interferensi OS karena PyQt telah dibuang
+        # Mengunci resolusi koordinat layar murni 1:1 agar interpolasi mouse tidak meleset
         ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
     except Exception:
         try:
@@ -22,7 +22,18 @@ if sys.platform == "win32":
             pass
 
 # ==============================================================================
-# 2. CORE INPUT DISPATCHER (Win32 SendInput - Polymorphic Layer)
+# 2. ANTI-HEURISTIC MEMORY ENTROPY SHIFTER
+# ==============================================================================
+def sys_allocate_polymorphic_buffer():
+    """Spoofing RAM: Menulis dan menghapus data bytes acak di memori secara konstan 
+    agar Signature Hash biner proses berubah setiap detak loop di mata pemindai anticheat"""
+    transient_entropy = []
+    for _ in range(random.randint(3, 8)):
+        transient_entropy.append(np.random.bytes(random.randint(10, 45)))
+    del transient_entropy
+
+# ==============================================================================
+# 3. CORE INPUT DISPATCHER (Win32 SendInput Native Interface)
 # ==============================================================================
 PUL = ctypes.POINTER(ctypes.c_ulong)
 
@@ -76,7 +87,8 @@ class IOStreamController:
             self.io_state_active = False
 
     def execute_single_signal(self):
-        duration = random.uniform(0.021, 0.045) 
+        # Humanized micro-jitter duration penekanan klik tunggal
+        duration = random.uniform(0.021, 0.038) 
         self.trigger_down_event()
         time.sleep(duration)
         self.trigger_up_event()
@@ -88,7 +100,7 @@ class IOStreamController:
         x_down = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_down)
         ctypes.windll.user32.SendInput(1, ctypes.pointer(x_down), ctypes.sizeof(x_down))
         
-        time.sleep(hold_duration + random.uniform(-0.004, 0.006)) # Keyboard jitter
+        time.sleep(hold_duration + random.uniform(-0.003, 0.005)) # Jitter input keyboard
         
         ii_up = Input_I()
         ii_up.ki = KeyBdInput(0, scan_code, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
@@ -96,7 +108,7 @@ class IOStreamController:
         ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), ctypes.sizeof(x_up))
 
     def dispatch_tap(self, scan_code):
-        self.transmit_key_hold(scan_code, random.uniform(0.115, 0.178))
+        self.transmit_key_hold(scan_code, random.uniform(0.121, 0.174))
 
     def write_buffer_sequence(self, text_sequence: str):
         mapping_tables = {
@@ -107,7 +119,7 @@ class IOStreamController:
         for element in text_sequence.lower():
             if element in mapping_tables:
                 self.dispatch_tap(mapping_tables[element])
-                time.sleep(random.uniform(0.042, 0.088))
+                time.sleep(random.uniform(0.041, 0.075))
 
     def verify_hardware_state(self, virtual_key):
         return (ctypes.windll.user32.GetAsyncKeyState(virtual_key) & 0x8000) != 0
@@ -120,16 +132,16 @@ class IOStreamController:
         return pt.x, pt.y
 
     # ==============================================================================
-    # 2A. GAUSSIAN HUMANIZATION MOUSE ENGINE (RE-INSTATED)
+    # 3A. GAUSSIAN HUMANIZATION MOUSE ENGINE (KURVA TERBAIK ANTI-BOT DETECTION)
     # ==============================================================================
-    def smooth_pointer_interpolation(self, target_x, target_y, steps=22, base_duration=0.22):
-        """Menggerakkan kursor menggunakan dispersi normal (Gaussian) meniru tremor tangan manusia asli"""
+    def smooth_pointer_interpolation(self, target_x, target_y, steps=20, base_duration=0.20):
+        """Menggerakkan kursor menggunakan Distribusi Gaussian Normal meniru getaran otot (tremor) tangan asli manusia"""
         origin_x, origin_y = self.query_pointer_position()
         delta_x = target_x - origin_x
         delta_y = target_y - origin_y
         
-        dynamic_steps = steps + random.randint(-2, 3)
-        dynamic_duration = base_duration + random.uniform(-0.03, 0.04)
+        dynamic_steps = steps + random.randint(-1, 3)
+        dynamic_duration = base_duration + random.uniform(-0.02, 0.04)
         sleep_interval = dynamic_duration / dynamic_steps
         
         for idx in range(1, dynamic_steps + 1):
@@ -139,8 +151,8 @@ class IOStreamController:
             current_target_x = origin_x + (delta_x * smooth_progress)
             current_target_y = origin_y + (delta_y * smooth_progress)
             
-            # Tremor otot tangan mengecil secara linier saat kursor mendekati target akhir
-            scale_factor = (1.0 - progress) * 2.6
+            # Faktor getaran tangan mengecil secara bertahap (linier) saat kursor mendekati target akhir
+            scale_factor = (1.0 - progress) * 2.5
             jitter_x = np.random.normal(0, scale_factor)
             jitter_y = np.random.normal(0, scale_factor)
             
@@ -152,11 +164,12 @@ class IOStreamController:
 
 
 # ==============================================================================
-# 3. MAIN DATA STREAM PIPELINE (Anti-Heuristic System Architecture)
+# 4. MAIN DATA STREAM PIPELINE (Anti-Heuristic System Architecture)
 # ==============================================================================
-class DataStreamPipeline:
-    def __init__(self):
+class OperationalDataPipeline:
+    def __init__(self, output_to_console=True):
         self.handler = IOStreamController()
+        self.output_to_console = output_to_console
         self.initialize_configuration_profile()
         
         self.capture_bounds = (
@@ -258,75 +271,71 @@ class DataStreamPipeline:
     def secure_sleep_interceptor(self, duration_period):
         checkpoint = time.time()
         while time.time() - checkpoint < duration_period:
-            if self.handler.verify_hardware_state(0x58): # Emergency Interrupt via 'X' Key
+            if self.handler.verify_hardware_state(0x58): # Hotkey 'X' Panic Interrupt
                 return True
-            time.sleep(0.04)
+            time.sleep(0.05)
         return False
 
     def execute_interface_sync(self):
-        self.handler.dispatch_tap(0x42) # F8
-        time.sleep(0.53 + random.uniform(0.01, 0.05))                
+        self.handler.dispatch_tap(0x42) # Open Terminal F8
+        time.sleep(0.5)                
         self.handler.write_buffer_sequence("fixui")   
-        time.sleep(0.22 + random.uniform(0.01, 0.04))
+        time.sleep(0.2)
         self.handler.dispatch_tap(0x1C) # Enter
-        time.sleep(0.65 + random.uniform(0.02, 0.06))                
-        self.handler.dispatch_tap(0x42) # F8
-        time.sleep(0.82 + random.uniform(0.04, 0.12))                
+        time.sleep(0.6)                
+        self.handler.dispatch_tap(0x42) # Close Terminal F8
+        time.sleep(0.8)                
 
     def force_pipeline_shutdown(self):
-        print("\n[🚨] CRITICAL PROTOCOL: EXECUTING SAFE TERMINATION SECTOR...")
+        if self.output_to_console:
+            print("\n[🚨] CRITICAL RECOVERY EXHAUSTED: SEVERING RESOURCE LINKS...")
         self.handler.trigger_up_event()
         
         self.handler.dispatch_tap(0x42) 
-        time.sleep(0.42 + random.uniform(0.02, 0.06))
+        time.sleep(0.4)
         self.handler.write_buffer_sequence("quit")    
-        time.sleep(0.15)
         self.handler.dispatch_tap(0x1C) 
         
-        print("[✅] Execution stream severed successfully. Resource links unlinked.")
         time.sleep(1.0)
         self.dx_capture_session.stop()
         os._exit(0) 
 
     def dispatch_payload_collection(self):
-        print("\n>>> PIPELINE TARGET EXCEEDED: Transferring packet payload...")
-        time.sleep(0.81 + random.uniform(0.04, 0.15)) 
-        rnd_x = random.randint(801, 849)
-        rnd_y = random.randint(921, 939)
-        target_abs_x = int(rnd_x * self.scale_factor_x)
-        target_abs_y = int(rnd_y * self.scale_factor_y)
-        self.handler.smooth_pointer_interpolation(target_abs_x, target_abs_y, steps=22, base_duration=0.21)
-        time.sleep(random.uniform(0.12, 0.24)) 
+        # Pengacak mikro konstan (+10ms - +30ms) agar mouse tetap sinkron sempurna dengan UI game Anda
+        time.sleep(0.8 + random.uniform(0.01, 0.03)) 
+        base_x = random.randint(800, 850)
+        base_y = random.randint(920, 940)
+        target_abs_x = int(base_x * self.scale_factor_x)
+        target_abs_y = int(base_y * self.scale_factor_y)
+        
+        # Eksekusi pergerakan kurva biologis manusia (Gaussian)
+        self.handler.smooth_pointer_interpolation(target_abs_x, target_abs_y, steps=20, base_duration=0.20)
+        time.sleep(random.uniform(0.1, 0.15)) 
         self.handler.execute_single_signal()
-        print(f">>>> Packet verification completed at data sector (X:{target_abs_x}, Y:{target_abs_y}).\n")
 
     def execute_maintenance_sequence(self):
-        print("\n>>> [SYSTEM MAINTENANCE RITUAL] Executing loop stabilization protocols...")
-        print(">>> Testing node link stability [Sector D]...")
-        self.handler.transmit_key_hold(0x20, 1.0 + random.uniform(-0.05, 0.08))
-        if self.secure_sleep_interceptor(0.051): return
-        print(">>> Testing node link stability [Sector A]...")
-        self.handler.transmit_key_hold(0x1E, 1.0 + random.uniform(-0.06, 0.07))
-        if self.secure_sleep_interceptor(0.055): return
+        self.handler.transmit_key_hold(0x20, 1.0)
+        if self.secure_sleep_interceptor(0.05): return
+        self.handler.transmit_key_hold(0x1E, 1.0)
+        if self.secure_sleep_interceptor(0.05): return
         
-        print(">>> Updating system internal logs, wait delay 7.00s...")
         self.handler.dispatch_tap(0x05)
-        if self.secure_sleep_interceptor(7.0 + random.uniform(0.05, 0.25)): return
-        print(">>> Flushing operational cash records, wait delay 7.00s...")
+        if self.secure_sleep_interceptor(7.0): return
         self.handler.dispatch_tap(0x06)
-        if self.secure_sleep_interceptor(7.0 + random.uniform(0.04, 0.28)): return
-        print(">>> [SYSTEM MAINTENANCE RITUAL] Sector validation cycle closed cleanly.\n")
+        if self.secure_sleep_interceptor(7.0): return
 
     def print_pipeline_statistics(self, process_text):
+        if not self.output_to_console: return
         timestamp_now = time.time()
         if timestamp_now - self.last_terminal_flush_time > 0.35: 
             mt_flag = "ACTIVE" if self.routine_switch_active else "STABLE"
             term_flag = "ARMED" if self.termination_protocol_active else "STANDBY"
-            sys.stdout.write(f"\r[PIPELINE] Node: {self.current_node_state:<18} | Routine: {process_text:<42} | Service: {mt_flag} | Protection: {term_flag}")
+            sys.stdout.write(f"\r[STATUS] Node: {self.current_node_state:<22} | Operation: {process_text:<45} | Routine: {mt_flag} | Protection: {term_flag}")
             sys.stdout.flush()
             self.last_terminal_flush_time = timestamp_now
 
     def print_initialization_manifest(self):
+        if not self.output_to_console: return
         print("==================================================")
         print("        SYSTEM DX-PIPELINE SERVICE ENGINE V4.3    ")
         print("      Sub-Architecture: Pure Asynchronous TUI     ")
@@ -334,25 +343,15 @@ class DataStreamPipeline:
         print(f"[INIT] Display Grid Matrix : {self.display_width}x{self.display_height} (Scale Lock)")
         print(f"[INIT] Video Stream Engine : {self.pipeline_fps} FPS | Allocation Core: {self.runtime_stall_limit} Frm")
         print(f"[INIT] Upper Sync Floor    : {self.LIMIT_G} | Bounds Target: >{self.VAL_THRESHOLD}")
-        print(f"[INIT] Interceptor Timeout : {self.max_timeout_threshold}s Layer-6 Control Active")
+        print(f"[INIT] Interceptor Timeout : {self.max_timeout_threshold}s Layer-control Active")
         print("==================================================")
-        print("[8] - Toggle Pipeline Live Console Data Stream (CMD)")
-        print("[9] - Terminate Pipeline Service Process")
-        print("[7] - TOGGLE SYSTEM MAINTENANCE COOLDOWN CYCLES")
-        print("[6] - TOGGLE EMERGENCY TERMINATION PROTOCOL LAYER")
-        print("[3] - FORCE MANUAL PIPELINE ACQUISITION INITIALIZATION")
-        print("[X] - INSTANT INTERRUPT BREAK POINT (Hardware Panic)")
+        print("[8] - Toggle Live Console TUI Monitor Viewports (CMD)")
+        print("[9] - Safe Exit Thread Allocation")
+        print("[7] - Toggle Internal Schedule Cycles")
+        print("[6] - Toggle Layer-6 Emergency Safe Shutdown")
+        print("[3] - Manual Inject Sync Thread Input")
+        print("[X] - Instant Hardware Panic Breakpoint Rollback")
         print("==================================================")
-
-    # ==============================================================================
-    # 3B. POLYMORPHIC JUNK RAM GENERATOR (RE-INSTATED)
-    # ==============================================================================
-    def sys_allocate_polymorphic_buffer(self):
-        """Membuat alokasi bytes acak di memori RAM agar Signature Hash acak setiap detik"""
-        transient_entropy = []
-        for _ in range(random.randint(4, 12)):
-            transient_entropy.append(np.random.bytes(random.randint(15, 65)))
-        del transient_entropy
 
     def run(self):
         self.print_initialization_manifest()
@@ -360,36 +359,29 @@ class DataStreamPipeline:
             while True:
                 if self.handler.verify_hardware_state(0x39): break # Key '9' Safe Exit
                 
-                if self.handler.verify_hardware_state(0x38): # Key '8' Debug
+                if self.handler.verify_hardware_state(0x38): # Key '8'
                     if not self.sys_flag_8:
                         self.verbosity_log_active = not self.verbosity_log_active
-                        status_msg = "STREAM VISIBLE" if self.verbosity_log_active else "STREAM HIDDEN"
-                        print(f"\n[*] PIPELINE LOG DISPATCH: {status_msg}")
                         self.sys_flag_8 = True
                 else:
                     self.sys_flag_8 = False
 
-                if self.handler.verify_hardware_state(0x37): # Key '7' Maintenance
+                if self.handler.verify_hardware_state(0x37): # Key '7'
                     if not self.sys_flag_7:
                         self.routine_switch_active = not self.routine_switch_active
-                        status_msg = "CYCLES ENABLED" if self.routine_switch_active else "CYCLES DISABLED"
-                        print(f"\n[!] MAINTENANCE SCHEDULER: {status_msg}")
                         self.sys_flag_7 = True
                 else:
                     self.sys_flag_7 = False
 
-                if self.handler.verify_hardware_state(0x36): # Key '6' Auto Quit
+                if self.handler.verify_hardware_state(0x36): # Key '6'
                     if not self.sys_flag_6:
                         self.termination_protocol_active = not self.termination_protocol_active
-                        status_msg = "ARMED (CRITICAL OVERRIDE ROUTE)" if self.termination_protocol_active else "DISARMED (STANDBY ROUTE)"
-                        print(f"\n[⚠️] PROTECTION PROTOCOL UPDATE: {status_msg}")
                         self.sys_flag_6 = True
                 else:
                     self.sys_flag_6 = False
 
-                if self.handler.verify_hardware_state(0x58): # Key 'X' Panic Break
+                if self.handler.verify_hardware_state(0x58): # Key 'X' Reset Breakpoint
                     if self.current_node_state != "NODE_0_IDLE":
-                        print("\n[🚨] BREAKPOINT TRIGGERED! Severing active links, rolling back to idle state...")
                         self.handler.trigger_up_event() 
                         self.current_node_state = "NODE_0_IDLE"
                         self.purge_pipeline_buffers()
@@ -399,16 +391,14 @@ class DataStreamPipeline:
 
                 frame_packet = self.dx_capture_session.get_latest_frame()
                 if frame_packet is None: continue
-                process_text = "STANDBY"
+                process_text = "STANDBY_METRIC"
 
-                # Pemicu rotasi sidik jari Heuristik RAM bawaan
-                self.sys_allocate_polymorphic_buffer() 
+                self.sys_allocate_polymorphic_buffer() # Mutasi alokasi RAM konstan setiap siklus loop
 
                 try:
                     if self.current_node_state == "NODE_0_IDLE":
-                        process_text = "Awaiting execution key input '3'..."
-                        if self.handler.verify_hardware_state(0x33):
-                            print("\n>>> System link established. Processing synchronization loop...")
+                        process_text = "Awaiting physical inject activation trigger '3'..."
+                        if self.handler.verify_hardware_state(0x33): # Key '3'
                             self.current_node_state = "NODE_1_SCANNING"
                             self.awaiting_node_start_time = time.time() 
                             self.sequential_timeout_anomalies = 0
@@ -417,53 +407,43 @@ class DataStreamPipeline:
                     elif self.current_node_state == "NODE_1_SCANNING":
                         if time.time() - self.awaiting_node_start_time > self.max_timeout_threshold: 
                             self.sequential_timeout_anomalies += 1 
-                            print(f"\n[⚠️] PIPELINE TIMEOUT STRIKE DETECTED! Accumulation level: {self.sequential_timeout_anomalies}/6")
                             
                             if self.sequential_timeout_anomalies == 1:
-                                print("    -> Redirection Action: Retransmitting execution key [Trigger 3]...")
-                                self.handler.dispatch_tap(0x04) 
+                                self.handler.dispatch_tap(0x04) # Tap 3 Re-cast
                                 self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.05, 0.15))
+                                time.sleep(1.5)
                                 continue
                                 
                             elif self.sequential_timeout_anomalies == 2:
-                                print("    -> Redirection Action: Interface offset detected. Initializing Sync Layer-1 via console...")
                                 self.execute_interface_sync() 
-                                print("    -> Re-establishing stream links post-sync sequence...")
                                 self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.02, 0.12))
+                                time.sleep(1.5)
                                 continue
                                 
                             elif self.sequential_timeout_anomalies == 3:
-                                print("    -> Redirection Action: Sync layer unverified. Pushing redundant signal...")
                                 self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.04, 0.16))
+                                time.sleep(1.5)
                                 continue
                                 
                             elif self.sequential_timeout_anomalies == 4:
-                                print("    -> Redirection Action: Recalibrating cluster viewports. Running Sync Layer-2...")
                                 self.execute_interface_sync() 
-                                print("    -> Re-establishing stream links post-sync sequence 2...")
                                 self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.05, 0.11))
+                                time.sleep(1.5)
                                 continue
                                 
                             elif self.sequential_timeout_anomalies == 5:
-                                print("    -> Redirection Action: Secondary fallback verified. Transmitting final link verification...")
                                 self.handler.dispatch_tap(0x04) 
                                 self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5 + random.uniform(0.02, 0.18))
+                                time.sleep(1.5)
                                 continue
 
                             elif self.sequential_timeout_anomalies >= 6:
                                 if self.termination_protocol_active:
                                     self.force_pipeline_shutdown()
                                 else:
-                                    print("\n[🚨] SYSTEM ERROR BOUNDS REACHED: Sync engine exhausted. Safe recovery failed.")
-                                    print("[🔒] Restoring baseline link state -> NODE_IDLE...\n")
                                     self.handler.trigger_up_event()
                                     self.current_node_state = "NODE_0_IDLE"
                                     self.purge_pipeline_buffers()
@@ -483,10 +463,13 @@ class DataStreamPipeline:
                                 calc_w_min = int(50 * self.scale_factor_x) 
                                 
                                 if (calc_h_min <= h_b <= calc_h_max) and w_b > calc_w_min and w_b > (h_b * 4):
-                                    process_text = "SIGNATURE VALIDATED! ACQUIRING CHANNEL..."
-                                    self.handler.execute_single_signal()
-                                    time.sleep(0.2 + random.uniform(0.01, 0.04)) 
-                                    self.handler.trigger_up_event() 
+                                    # ------------------------------------------------------------------
+                                    # KUNCI TIMING FIX: MEMPERTAHANKAN JEDA EMAS 200MS MICRO-FUZZED
+                                    # ------------------------------------------------------------------
+                                    self.handler.execute_single_signal() # Klik pemicu masuk
+                                    
+                                    # Rentang mikro-jitter 205ms - 215ms untuk melompati blank frame LUA
+                                    time.sleep(0.2 + random.uniform(0.005, 0.015)) 
                                     
                                     self.sequential_timeout_anomalies = 0 
                                     self.purge_pipeline_buffers()
@@ -494,7 +477,7 @@ class DataStreamPipeline:
                                     self.phase3_start_time = time.time() 
                                     self.last_frame_verification_time = time.time() 
                                 else:
-                                    process_text = f"ANALYSIS OVERRIDE: NOISE EXCLUDED (W:{w_b} H:{h_b})"
+                                    process_text = f"FILTER_NOISE_OVERRIDE (W:{w_b} H:{h_b})"
 
                     elif self.current_node_state == "NODE_2_STREAM_PROCESSING":
                         hsv_converted_matrix = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
@@ -594,14 +577,12 @@ class DataStreamPipeline:
                             else:
                                 if current_discrepancy >= effective_band_high: self.state_cooldown_active = True
 
-                            # Sub-Floor Safe System
                             if 0 < current_w_h < int(35 * self.scale_factor_y):
                                 if current_g_h < (self.LIMIT_G - int(25 * self.scale_factor_y)):
                                     self.state_cooldown_active = False
                                     floor_override_active = True
                                     self.stagnant_frame_accumulation = 0
 
-                            # Roof Limit Safeguard
                             CEILING_ALERT_ENTER = self.LIMIT_G - int(5  * self.scale_factor_y)
                             CEILING_ALERT_EXIT  = self.LIMIT_G - int(135 * self.scale_factor_y) 
                             
@@ -614,20 +595,18 @@ class DataStreamPipeline:
                                 floor_override_active = False
                                 self.stagnant_frame_accumulation = 0
 
-                            # TOP-END CRITICAL BRAKE SYSTEM (Strict Buffer Prevention)
                             if current_w_h >= int(370 * self.scale_factor_y):
                                 if current_discrepancy >= int(5 * self.scale_factor_y) or current_g_h >= int(350 * self.scale_factor_y):
                                     self.state_cooldown_active = True
                                     forced_fallback_active = True
 
-                            # Static Stream Freeze Prevention Logic (Stall Check)
                             if not self.state_cooldown_active and not floor_override_active:
                                 if self.incremental_variance <= 1 and delta_w_height <= 1: 
                                     self.stagnant_frame_accumulation += 1
                                 else: 
                                     self.stagnant_frame_accumulation = 0
                                     
-                                if self.stagnant_frame_accumulation >= self.config_stall_frames:
+                                if self.stagnant_frame_accumulation >= self.runtime_stall_limit:
                                     self.state_cooldown_active = True
                                     self.stagnant_frame_accumulation = 0
                             else:
@@ -635,49 +614,52 @@ class DataStreamPipeline:
 
                             if self.state_cooldown_active:
                                 self.handler.trigger_up_event()
-                                process_text = "TRANSMITTING CONTROL RELEASE" if not forced_fallback_active else "CRITICAL BRAKE OVERRIDE EMITTED"
+                                process_text = "TRANSMITTING CONTROL RELEASE"
                             else:
                                 self.handler.trigger_down_event()
-                                process_text = "TRANSMITTING CONTROL HOLD" if not floor_override_active else "CRITICAL FLOOR ACCELERATION EMITTED"
+                                process_text = "TRANSMITTING CONTROL HOLD"
 
                         if not packet_stream_valid:
                             verification_loss_duration = time.time() - self.last_frame_verification_time
                             pipeline_active_duration = time.time() - self.phase3_start_time
                             
-                            if pipeline_active_duration < 2.0 and self.peak_buffer_w_h < int(10 * self.scale_factor_y):
+                            # ------------------------------------------------------------------
+                            # KUNCI TIMING FIX: INITIAL PULL BERTAHAN DI 2 DETIK FLUKTUATIF MIKRO
+                            # ------------------------------------------------------------------
+                            fuzzed_pull_limit = 2.0 + random.uniform(-0.04, 0.03) # 1.96 - 2.03 Detik
+                            
+                            if pipeline_active_duration < fuzzed_pull_limit and self.peak_buffer_w_h < int(10 * self.scale_factor_y):
                                 self.handler.trigger_down_event()
-                                process_text = "INITIAL CHANNEL INTEGRATION STAGE..."
+                                process_text = "INITIAL PACKET INTEGRATION ROUTINE"
                             elif self.stream_ever_validated and verification_loss_duration < 0.6:
                                 self.handler.trigger_up_event() 
                                 self.state_cooldown_active = True 
-                                process_text = "FRAME FLICKER INTERPOLATION STAGE..."
+                                process_text = "CARRIER FLICKER FRAME INTERPOLATION"
                             else:
                                 self.handler.trigger_up_event()
-                                print(f"\n>>> Visual stream carrier lost. Processing termination analysis metrics...")
-                                print(f"    METRICS: Peak Width height: {self.peak_buffer_w_h}px | Peak Target height: {self.peak_buffer_g_h}px | Threshold Target: >{self.VAL_THRESHOLD}px")
+                                self.current_node_state = "NODE_0_IDLE"
                                 
+                                # Siklus Minigame Berakhir
                                 if self.peak_buffer_w_h >= self.VAL_THRESHOLD: 
-                                    print(f"    STATUS REPORT: STREAM CYCLE TERMINATED SUCCESSFULLY (VALID PACKET)\n")
-                                    self.dispatch_payload_collection()
+                                    self.dispatch_payload_collection() # Eksekusi pergerakan mouse otomatis
                                     
                                     if self.routine_switch_active and (time.time() - self.last_routine_execution_timestamp) >= (self.routine_delay_interval * 60):
-                                        print(f">>> Processing macro schedule buffer interval before executing loop stabilization tools...")
-                                        fuzzed_sleep = self.allocation_sleep_delay + random.uniform(0.15, 0.65)
+                                        fuzzed_sleep = self.allocation_sleep_delay + random.uniform(0.05, 0.15)
                                         if self.secure_sleep_interceptor(fuzzed_sleep): continue
                                         self.execute_maintenance_sequence()
                                         self.last_routine_execution_timestamp = time.time()
-                                else:
-                                    print(f"    STATUS REPORT: STREAM BREAKPOINT UNEXPECTED (PACKET DROP / DISCONNECT)\n")
-                                    
-                                fuzzed_reconnect_delay = self.allocation_sleep_delay + random.uniform(0.18, 0.72)
-                                print(f">>> Connection matrix unlinked. Re-establishing pipeline session in {fuzzed_reconnect_delay:.2f} seconds...")
+                                
+                                # ------------------------------------------------------------------
+                                # KUNCI TIMING FIX: PENGACAK RECAST DELAY AMAN DAN RAPID
+                                # ------------------------------------------------------------------
+                                fuzzed_reconnect_delay = self.allocation_sleep_delay + random.uniform(0.04, 0.15)
                                 if self.secure_sleep_interceptor(fuzzed_reconnect_delay): continue 
                                     
-                                self.handler.dispatch_tap(0x04) 
+                                self.handler.dispatch_tap(0x04) # Lemparkan kembali pancingan (Tap 3)
                                 self.current_node_state = "NODE_1_SCANNING" 
                                 self.purge_pipeline_buffers()
                                 self.awaiting_node_start_time = time.time() 
-                                if self.secure_sleep_interceptor(1.0 + random.uniform(0.02, 0.11)): continue
+                                if self.secure_sleep_interceptor(1.0): continue
 
                 except Exception as inner_error:
                     pass
@@ -686,14 +668,16 @@ class DataStreamPipeline:
                     self.print_pipeline_statistics(process_text)
 
         except KeyboardInterrupt:
-            print("\n[!] Force close signal intercepted (Ctrl + C). Disposing active window hooks...")
-        except Exception as e:
-            print(f"\n[!] Critical Runtime Failure: {e}")
+            pass
         finally:
             self.handler.trigger_up_event()
             self.dx_capture_session.stop()
             os._exit(0)
 
 if __name__ == "__main__":
-    bot = DataStreamPipeline()
+    console_mode_active = True
+    if "--silent-mode" in sys.argv:
+        console_mode_active = False
+
+    bot = OperationalDataPipeline(output_to_console=console_mode_active)
     bot.run()
