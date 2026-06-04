@@ -129,10 +129,9 @@ class IOStreamController:
         return pt.x, pt.y
 
     def smooth_pointer_interpolation(self, target_x, target_y, steps=20, base_duration=0.20):
-        """Menggerakkan kursor menggunakan Distribusi Gaussian Normal (Tremor Tangan Biologis)"""
-        origin_x, origin_y = self.query_pointer_position()
-        delta_x = target_x - origin_x
-        delta_y = target_y - origin_y
+        start_x, start_y = self.query_pointer_position()
+        delta_x = target_x - start_x
+        delta_y = target_y - start_y
         
         dynamic_steps = steps + random.randint(-1, 3)
         dynamic_duration = base_duration + random.uniform(-0.02, 0.04)
@@ -140,12 +139,11 @@ class IOStreamController:
         
         for idx in range(1, dynamic_steps + 1):
             progress = idx / dynamic_steps
-            smooth_progress = progress * progress * (3 - 2 * progress) # S-Curve
+            smooth_progress = progress * progress * (3 - 2 * progress)
             
-            current_target_x = origin_x + (delta_x * smooth_progress)
-            current_target_y = origin_y + (delta_y * smooth_progress)
+            current_target_x = start_x + (delta_x * smooth_progress)
+            current_target_y = start_y + (delta_y * smooth_progress)
             
-            # Faktor getaran otot mengecil linier mendekati target
             scale_factor = (1.0 - progress) * 2.5
             jitter_x = np.random.normal(0, scale_factor)
             jitter_y = np.random.normal(0, scale_factor)
@@ -162,7 +160,6 @@ class OperationalDataPipeline:
         self.handler = IOStreamController()
         self.output_to_console = output_to_console
         
-        # Inisialisasi profil konfigurasi aman sandboxing
         self.initialize_configuration_profile()
         
         self.capture_bounds = (
@@ -172,9 +169,6 @@ class OperationalDataPipeline:
             int(900 * self.scale_factor_y)
         )
         
-        # ------------------------------------------------------------------
-        # LIFECYCLE FIX: PASTIKAN MERESET SINGLETON KANVAS DXCAM SEBELUM BOOTING
-        # ------------------------------------------------------------------
         self.dx_capture_session = None
         try:
             self.dx_capture_session = dxcam.create(output_color="BGR")
@@ -184,8 +178,6 @@ class OperationalDataPipeline:
             self.dx_capture_session = dxcam.create(output_color="BGR")
             
         self.dx_capture_session.start(target_fps=self.pipeline_fps, region=self.capture_bounds)
-
-        # Kunci Keamanan: Berikan waktu jeda bagi driver DXGI Windows untuk map buffer
         time.sleep(1.5)
 
         self.lower_tier_g = np.array([0, 120, 165]) 
@@ -194,7 +186,8 @@ class OperationalDataPipeline:
         self.upper_tier_w = np.array([179, 50, 255])
         
         self.current_node_state = "NODE_0_IDLE"
-        self.verbosity_log_active = False
+        self.verbosity_log_active = True 
+        
         self.sys_flag_8 = False
         self.routine_switch_active = False
         self.sys_flag_7 = False
@@ -204,12 +197,16 @@ class OperationalDataPipeline:
         self.last_routine_execution_timestamp = time.time()
         self.awaiting_node_start_time = 0
         self.sequential_timeout_anomalies = 0
-        self.last_terminal_flush_time = time.time() 
+        
+        # ------------------------------------------------------------------
+        # FIX LOG SPAM: INSTANSIASI REGISTER LACAK PERUBAHAN TUI KONSOL
+        # ------------------------------------------------------------------
+        self.last_printed_state = None
+        self.last_printed_text = None
 
         self.purge_pipeline_buffers()
 
     def initialize_configuration_profile(self):
-        # Proteksi Jalur Sandbox: Deteksi biner beku (Onefile) vs Skrip mentah
         if getattr(sys, 'frozen', False):
             base_dir = os.path.dirname(sys.executable)
         else:
@@ -225,7 +222,7 @@ class OperationalDataPipeline:
             parser['ENGINE'] = {
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
-                'TARGET_FPS': '60',            # Diturunkan ke 60 FPS demi stabilitas inisialisasi handshaking biner
+                'TARGET_FPS': '120',            
                 'STALL_FRAMES': '9999',          
                 'ABSOLUTE_MAX_GREEN': '360',  
                 'SUCCESS_THRESHOLD': '390',   
@@ -250,7 +247,7 @@ class OperationalDataPipeline:
         
         self.display_width = int(parser['ENGINE'].get('SCREEN_WIDTH', '1920'))
         self.display_height = int(parser['ENGINE'].get('SCREEN_HEIGHT', '1080'))
-        self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '60'))
+        self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '120'))
         self.runtime_stall_limit = int(parser['ENGINE'].get('STALL_FRAMES', '9999'))
         self.max_timeout_threshold = int(parser['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
         self.routine_delay_interval = float(parser['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
@@ -333,15 +330,25 @@ class OperationalDataPipeline:
         self.handler.dispatch_tap(0x06)
         if self.secure_sleep_interceptor(7.0): return
 
+    # --------------------------------==========================================
+    # FIX LOG SPAM: METODE EVENT-DRIVEN LOGGING BERSIH TANPA RETUR CARRIAGE (\r)
+    # --------------------------------==========================================
     def print_pipeline_statistics(self, process_text):
         if not self.output_to_console: return
-        timestamp_now = time.time()
-        if timestamp_now - self.last_terminal_flush_time > 0.35: 
-            mt_flag = "ACTIVE" if self.routine_switch_active else "STABLE"
-            term_flag = "ARMED" if self.termination_protocol_active else "STANDBY"
-            sys.stdout.write(f"\r[STATUS] Node: {self.current_node_state:<22} | Log: {process_text:<45} | Schedule: {mt_flag} | Protection: {term_flag}")
-            sys.stdout.flush()
-            self.last_terminal_flush_time = timestamp_now
+        
+        # Gerbang Pemutus Spam: Jika State dan Text tidak berubah, JANGAN CETAK APAPUN!
+        if self.current_node_state == self.last_printed_state and process_text == self.last_printed_text:
+            return
+            
+        mt_flag = "ACTIVE" if self.routine_switch_active else "STABLE"
+        term_flag = "ARMED" if self.termination_protocol_active else "STANDBY"
+        
+        # Dicetak menggunakan baris baru (\n) murni agar log rapi, sekuensial, dan terbaca per transisi event
+        print(f"[STATUS] Node: {self.current_node_state:<22} | Log: {process_text:<45} | Schedule: {mt_flag} | Protection: {term_flag}")
+        
+        # Simpan status cetak terakhir ke memori register kelas
+        self.last_printed_state = self.current_node_state
+        self.last_printed_text = process_text
 
     def print_initialization_manifest(self):
         if not self.output_to_console: return
@@ -358,66 +365,89 @@ class OperationalDataPipeline:
         print("[9] - Safe Exit Thread Allocation")
         print("[7] - Toggle Internal Schedule Cycles")
         print("[6] - Toggle Layer-6 Emergency Safe Shutdown")
-        print("[3] - Manual Inject Sync Thread Input")
+        print("[3] - MANUAL INJECT SYNC THREAD START")
         print("[X] - Instant Hardware Panic Breakpoint Rollback")
         print("==================================================")
 
     def run(self):
         self.print_initialization_manifest()
+        process_text = "Awaiting inject activation trigger '3'..."
+        
         try:
             while True:
+                # ==============================================================
+                # SEKTOR PRIORITAS 1: GERBANG INTERUPSI HOTKEY GLOBAL (INSTAN)
+                # ==============================================================
                 if self.handler.verify_hardware_state(0x39): break # Key '9' Safe Exit
                 
-                if self.handler.verify_hardware_state(0x38): 
+                if self.handler.verify_hardware_state(0x38): # Key '8'
                     if not self.sys_flag_8:
                         self.verbosity_log_active = not self.verbosity_log_active
+                        status_msg = "SHOW STATS" if self.verbosity_log_active else "HIDE STATS"
+                        print(f"\n[*] MONITOR SYSTEM INTERFACE LOG: {status_msg}")
                         self.sys_flag_8 = True
                 else:
                     self.sys_flag_8 = False
 
-                if self.handler.verify_hardware_state(0x37): 
+                if self.handler.verify_hardware_state(0x37): # Key '7'
                     if not self.sys_flag_7:
                         self.routine_switch_active = not self.routine_switch_active
+                        status_msg = "ON" if self.routine_switch_active else "OFF"
+                        print(f"\n[!] INTERNAL AUTO-SCHEDULE ENGINE: {status_msg}")
                         self.sys_flag_7 = True
                 else:
                     self.sys_flag_7 = False
 
-                if self.handler.verify_hardware_state(0x36): 
+                if self.handler.verify_hardware_state(0x36): # Key '6'
                     if not self.sys_flag_6:
                         self.termination_protocol_active = not self.termination_protocol_active
+                        status_msg = "ON" if self.termination_protocol_active else "OFF"
+                        print(f"\n[⚠️] PROTECTION PROTOCOL INTERCEPTOR LAYER-6: {status_msg}")
                         self.sys_flag_6 = True
                 else:
                     self.sys_flag_6 = False
 
-                if self.handler.verify_hardware_state(0x58): # Key 'X' Breakpoint
+                if self.handler.verify_hardware_state(0x58): # Key 'X' Reset Panic
                     if self.current_node_state != "NODE_0_IDLE":
+                        print("\n[🚨] PANIC BREAKPOINT INTERRUPT! Rolling back to idle engine state...")
                         self.handler.trigger_up_event() 
                         self.current_node_state = "NODE_0_IDLE"
                         self.purge_pipeline_buffers()
                         self.sequential_timeout_anomalies = 0
+                        process_text = "Awaiting inject activation trigger '3'..."
                         time.sleep(0.5) 
                         continue 
 
+                # KUNCI UTAMA: Memastikan tombol '3' dibaca instan tanpa terpotong continue frame
+                if self.current_node_state == "NODE_0_IDLE":
+                    process_text = "Awaiting inject activation trigger '3'..."
+                    if self.handler.verify_hardware_state(0x33): # Key '3'
+                        print("\n>>> INJECT SIGNALS RECOGNIZED: INITIALIZING STREAM MONITOR SIKLUS-1...")
+                        self.current_node_state = "NODE_1_SCANNING"
+                        self.awaiting_node_start_time = time.time() 
+                        self.sequential_timeout_anomalies = 0
+                        process_text = "SCANNING ENGINE ACTIVE"
+                        time.sleep(1.0) 
+
+                # Cetak status log secara asinkron (Hanya jika terdeteksi perubahan data)
+                if self.verbosity_log_active:
+                    self.print_pipeline_statistics(process_text)
+
+                # ==============================================================
+                # SEKTOR PRIORITAS 2: PENANGKAPAN CITRA DAN MANAGEMENT MEMORI
+                # ==============================================================
                 frame_packet = self.dx_capture_session.get_latest_frame()
                 if frame_packet is None: 
-                    time.sleep(0.005) # Mengistirahatkan CPU jika frame kosong
+                    time.sleep(0.001) 
                     continue
                     
-                process_text = "STANDBY_METRIC"
-                self.sys_allocate_polymorphic_buffer()
+                sys_allocate_polymorphic_buffer()
 
                 try:
-                    if self.current_node_state == "NODE_0_IDLE":
-                        process_text = "Awaiting verification code initialization trigger '3'..."
-                        if self.handler.verify_hardware_state(0x33): 
-                            self.current_node_state = "NODE_1_SCANNING"
-                            self.awaiting_node_start_time = time.time() 
-                            self.sequential_timeout_anomalies = 0
-                            time.sleep(1.0) 
-
-                    elif self.current_node_state == "NODE_1_SCANNING":
+                    if self.current_node_state == "NODE_1_SCANNING":
                         if time.time() - self.awaiting_node_start_time > self.max_timeout_threshold: 
                             self.sequential_timeout_anomalies += 1 
+                            print(f"\n[⚠️] ANOMALOUS TIMEOUT: Stream lost iteration -> {self.sequential_timeout_anomalies}")
                             
                             if self.sequential_timeout_anomalies == 1:
                                 self.handler.dispatch_tap(0x04) 
@@ -430,30 +460,16 @@ class OperationalDataPipeline:
                                 self.awaiting_node_start_time = time.time()
                                 time.sleep(1.5)
                                 continue
-                            elif self.sequential_timeout_anomalies == 3:
-                                self.handler.dispatch_tap(0x04) 
-                                self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5)
-                                continue
-                            elif self.sequential_timeout_anomalies == 4:
-                                self.execute_interface_sync() 
-                                self.handler.dispatch_tap(0x04) 
-                                self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5)
-                                continue
-                            elif self.sequential_timeout_anomalies == 5:
-                                self.handler.dispatch_tap(0x04) 
-                                self.awaiting_node_start_time = time.time()
-                                time.sleep(1.5)
-                                continue
                             elif self.sequential_timeout_anomalies >= 6:
                                 if self.termination_protocol_active:
                                     self.force_pipeline_shutdown()
                                 else:
+                                    print("\n[🔒] MAXIMUM LAYER INTERCEPT EXHAUSTED: FORCING STANDBY PACKET STATE...")
                                     self.handler.trigger_up_event()
                                     self.current_node_state = "NODE_0_IDLE"
                                     self.purge_pipeline_buffers()
                                     self.sequential_timeout_anomalies = 0 
+                                    process_text = "Awaiting inject activation trigger '3'..."
                                     time.sleep(1.0)
                                     continue
 
@@ -469,12 +485,8 @@ class OperationalDataPipeline:
                                 calc_w_min = int(50 * self.scale_factor_x) 
                                 
                                 if (calc_h_min <= h_b <= calc_h_max) and w_b > calc_w_min and w_b > (h_b * 4):
-                                    # ------------------------------------------------------------------
-                                    # TIMING EMAS: JEDA TRANSISI LUA ANTARA FASE 2 KE FASE 3 (200MS)
-                                    # ------------------------------------------------------------------
+                                    process_text = "VALID TRANSITION ACQUIRED! MERGING CHANNEL..."
                                     self.handler.execute_single_signal() 
-                                    
-                                    # Jitter tipis 205-215ms menipu deteksi pola konstan anticheat
                                     time.sleep(0.2 + random.uniform(0.005, 0.015)) 
                                     
                                     self.sequential_timeout_anomalies = 0 
@@ -483,7 +495,7 @@ class OperationalDataPipeline:
                                     self.phase3_start_time = time.time() 
                                     self.last_frame_verification_time = time.time() 
                                 else:
-                                    process_text = "METRIC_OVERRIDE_FILTER_NOISE"
+                                    process_text = "FILTER_NOISE_OVERRIDE"
 
                     elif self.current_node_state == "NODE_2_STREAM_PROCESSING":
                         hsv_converted_matrix = cv2.cvtColor(frame_packet, cv2.COLOR_BGR2HSV)
@@ -587,7 +599,6 @@ class OperationalDataPipeline:
                                 if current_g_h < (self.LIMIT_G - int(25 * self.scale_factor_y)):
                                     self.state_cooldown_active = False
                                     floor_override_active = True
-                                    self.stagnant_frame_accumulation = 0
 
                             CEILING_ALERT_ENTER = self.LIMIT_G - int(5  * self.scale_factor_y)
                             CEILING_ALERT_EXIT  = self.LIMIT_G - int(135 * self.scale_factor_y) 
@@ -599,7 +610,6 @@ class OperationalDataPipeline:
                                 self.state_cooldown_active = True
                                 forced_fallback_active = True
                                 floor_override_active = False
-                                self.stagnant_frame_accumulation = 0
 
                             if current_w_h >= int(370 * self.scale_factor_y):
                                 if current_discrepancy >= int(5 * self.scale_factor_y) or current_g_h >= int(350 * self.scale_factor_y):
@@ -629,9 +639,6 @@ class OperationalDataPipeline:
                             verification_loss_duration = time.time() - self.last_frame_verification_time
                             pipeline_active_duration = time.time() - self.phase3_start_time
                             
-                            # ------------------------------------------------------------------
-                            # TIMING EMAS: INITIAL PULL BERTAHAN DI KISARAN 2 DETIK MIKRO-JITTER
-                            # ------------------------------------------------------------------
                             fuzzed_pull_limit = 2.0 + random.uniform(-0.04, 0.03) 
                             
                             if pipeline_active_duration < fuzzed_pull_limit and self.peak_buffer_w_h < int(10 * self.scale_factor_y):
@@ -643,35 +650,33 @@ class OperationalDataPipeline:
                                 process_text = "CARRIER FLICKER FRAME INTERPOLATION"
                             else:
                                 self.handler.trigger_up_event()
-                                self.current_node_state = "NODE_0_IDLE"
+                                print(f"\n>>> PIPELINE TRANSITION LOSS.")
+                                print(f"    METRICS: Peak White: {self.peak_buffer_w_h}px | Peak Green: {self.peak_buffer_g_h}px | Target Base: >{self.VAL_THRESHOLD}px")
                                 
                                 if self.peak_buffer_w_h >= self.VAL_THRESHOLD: 
+                                    print(f"    CYCLE STATUS: VALIDATED SUCCESS\n")
                                     self.dispatch_payload_collection() 
                                     
                                     if self.routine_switch_active and (time.time() - self.last_routine_execution_timestamp) >= (self.routine_delay_interval * 60):
-                                        fuzzed_sleep = self.allocation_sleep_delay + random.uniform(0.05, 0.15)
-                                        if self.secure_sleep_interceptor(fuzzed_sleep): continue
+                                        if self.secure_sleep_interceptor(self.allocation_sleep_delay): continue
                                         self.execute_maintenance_sequence()
                                         self.last_routine_execution_timestamp = time.time()
-                                
-                                # ------------------------------------------------------------------
-                                # TIMING EMAS: RECAST JEDA MELEMPAR KEMBALI SECARA NATURAL
-                                # ------------------------------------------------------------------
-                                fuzzed_reconnect_delay = self.allocation_sleep_delay + random.uniform(0.04, 0.15)
-                                if self.secure_sleep_interceptor(fuzzed_reconnect_delay): continue 
+                                else:
+                                    print(f"    CYCLE STATUS: LOSS / BROKEN SIGNAL\n")
                                     
-                                self.handler.dispatch_tap(0x04) # Tap 3 Cast
+                                print(f">>> Siklus Selesai. Melempar kembali pancingan baru dalam {self.allocation_sleep_delay} detik...")
+                                if self.secure_sleep_interceptor(self.allocation_sleep_delay): continue 
+                                    
+                                self.handler.dispatch_tap(0x04) 
                                 self.current_node_state = "NODE_1_SCANNING" 
                                 self.purge_pipeline_buffers()
                                 self.awaiting_node_start_time = time.time() 
+                                process_text = "SCANNING ENGINE ACTIVE"
                                 if self.secure_sleep_interceptor(1.0): continue
 
                 except Exception as inner_error:
                     if self.verbosity_log_active:
                         print(f"\n[⚠️ Inner Error] Logic execution context failure: {inner_error}")
-
-                if self.verbosity_log_active:
-                    self.print_pipeline_statistics(process_text)
 
         except KeyboardInterrupt:
             pass
@@ -679,32 +684,23 @@ class OperationalDataPipeline:
             print(f"\n[🚨 CRITICAL ENGINE RECOVERY] Fatal initialization fault: {global_fatal_error}")
             time.sleep(8.0)
         finally:
-            # ------------------------------------------------------------------
-            # LIFECYCLE MANAGEMENT FIX: DE-ALOKASI MEMORI KERNEL DXGI SECARA ABSOLUT
-            # ------------------------------------------------------------------
             if self.output_to_console:
                 print("\n[*] De-allocating hardware resources and releasing DXGI hooks...")
                 
             try:
                 self.handler.trigger_up_event() 
-                
                 if hasattr(self, 'dx_capture_session') and self.dx_capture_session is not None:
                     self.dx_capture_session.stop() 
-                    
                     if hasattr(self.dx_capture_session, 'device') and self.dx_capture_session.device is not None:
                         del self.dx_capture_session.device
-                    
                     del self.dx_capture_session
                     self.dx_capture_session = None
-                    
                 if hasattr(dxcam, "Instance"):
                     dxcam.Instance = None
-                    
                 print("[✅] Memory buffer cleared successfully. Thread safe to terminate.")
             except Exception as cleanup_error:
                 if self.output_to_console:
                     print(f"[!] Error during hardware de-allocation: {cleanup_error}")
-            
             sys.exit(0)
 
 if __name__ == "__main__":
