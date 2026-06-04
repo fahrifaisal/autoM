@@ -1,4 +1,4 @@
-name: Nuitka Build Fishing
+name: Nuitka Build Compilation Pipeline
 
 on:
   workflow_dispatch:
@@ -25,33 +25,39 @@ jobs:
         python -m pip install --upgrade pip
         pip install numpy opencv-python dxcam configparser
 
-    # VARIANT 1: SILENT STEALTH BINARY (NO-CONSOLE)
-    - name: Compile Variant 1 - Silent Stealth Binary
+    # VARIANT 1: SILENT STEALTH BINARY (NON-CONSOLE / SENYAP MUTLAK)
+    - name: Compile Variant 1 - Silent Stealth Binary (Non-Console)
       uses: Nuitka/Nuitka-Action@main
       with:
         nuitka-version: main
         script-name: fishing.py
-        mode: onefile
-        lto: yes
-        windows-console-mode: disable
+        mode: standalone
         output-file: WinHostNetworkStorageService.exe
+        extra-options: |
+          --onefile
+          --lto=yes
+          --windows-console-mode=disable
 
-    # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE)
-    - name: Compile Variant 2 - Diagnostic Debug Binary
+    # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE / UNTUK TES TIMING)
+    - name: Compile Variant 2 - Diagnostic Debug Binary (With-Console)
       uses: Nuitka/Nuitka-Action@main
       with:
         nuitka-version: main
         script-name: fishing.py
-        mode: onefile
-        lto: yes
-        windows-console-mode: force
+        mode: standalone
         output-file: HostDiagnosticToolService.exe
+        extra-options: |
+          --onefile
+          --lto=yes
+          --windows-console-mode=force
 
+    # Verifikasi hasil kompilasi di folder output default Nuitka-Action (build/)
     - name: Verify Compiled Artifacts Presence
       run: |
-        if (Test-Path "build/WinHostNetworkStorageService.exe") { Write-Output "Stealth Binary Verified" } else { throw "Stealth Binary Missing" }
-        if (Test-Path "build/HostDiagnosticToolService.exe") { Write-Output "Debug Binary Verified" } else { throw "Debug Binary Missing" }
+        if (Test-Path "build/WinHostNetworkStorageService.exe") { Write-Output "Stealth Binary Verified Successfully" } else { throw "Stealth Binary Missing" }
+        if (Test-Path "build/HostDiagnosticToolService.exe") { Write-Output "Debug Binary Verified Successfully" } else { throw "Debug Binary Missing" }
 
+    # Mengompres dan mengunggah hasil menjadi berkas .zip yang bisa langsung diunduh
     - name: Upload Compiled Production Artifacts
       uses: actions/upload-artifact@v4
       with:
