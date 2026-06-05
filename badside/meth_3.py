@@ -50,7 +50,7 @@ MOUSEEVENTF_LEFTUP = 0x0004
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_SCANCODE = 0x0008
 
-class MacroController:
+class WinNativeDispatcher:
     def __init__(self):
         self.mouse_pressed = False
         self.held_keys = set()
@@ -85,7 +85,7 @@ class MacroController:
 
     def click_instant(self, hold_time=0.10):
         self.mouse_down()
-        time.sleep(hold_time)
+        time.sleep(hold_time + random.uniform(-0.003, 0.005))
         self.mouse_up()
 
     def key_down(self, scancode):
@@ -106,44 +106,58 @@ class MacroController:
             ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
             self.held_keys.remove(scancode)
 
-    def smooth_move_curve(self, target_x, target_y, steps=35, duration=0.25):
+    def interpolate_vector_stream(self, raw_target_x, raw_target_y, steps=20, base_duration=0.18):
+        """Mekanisme Pergerakan Mouse Gaussian Curve Adaptif Cepat dengan Micro-Jitter Spasial"""
+        # Pengacak koordinat dinamis tipis-tipis (-2 s.d 2 piksel) untuk mengelabui deteksi statis
+        target_x = raw_target_x + random.randint(-2, 2)
+        target_y = raw_target_y + random.randint(-2, 2)
+        
         start_x, start_y = self.get_cursor_pos()
         dx = target_x - start_x
         dy = target_y - start_y
         if dx == 0 and dy == 0: return
         
-        sleep_time = duration / steps
-        for i in range(1, steps + 1):
-            t = i / steps
+        fuzzed_steps = steps + random.randint(-2, 3)
+        fuzzed_duration = base_duration + random.uniform(-0.015, 0.025)
+        sleep_time = fuzzed_duration / fuzzed_steps
+        
+        for i in range(1, fuzzed_steps + 1):
+            t = i / fuzzed_steps
             smooth_t = t * t * (3 - 2 * t)
-            curr_x = int(start_x + (dx * smooth_t))
-            curr_y = int(start_y + (dy * smooth_t))
-            ctypes.windll.user32.SetCursorPos(curr_x, curr_y)
+            curr_x = start_x + (dx * smooth_t)
+            curr_y = start_y + (dy * smooth_t)
+            
+            # Efek tremor tangan biologis yang meredup linier mendekati target akhir
+            damping_factor = (1.0 - t) * 1.6
+            jitter_x = np.random.normal(0, damping_factor) if damping_factor > 0 else 0
+            jitter_y = np.random.normal(0, damping_factor) if damping_factor > 0 else 0
+            
+            ctypes.windll.user32.SetCursorPos(int(curr_x + jitter_x), int(curr_y + jitter_y))
             time.sleep(sleep_time)
 
 
 # ==============================================================================
 # 3. LOOPS PRODUCTION ENGINE FOR PHASE 3 (FIXED CLASS STRUCTURE)
 # ==============================================================================
-class MethPhase3Engine:
+class StorageAllocationService:
     def __init__(self):
-        self.ctrl = MacroController()
+        self.ctrl = WinNativeDispatcher()
         self.is_running = False
         self.loop_counter = 0
         
-        self.camera = dxcam.create(output_color="BGR")
+        # Mengaktifkan Ring Buffer sirkular tingkat hardware untuk performa penangkapan tinggi
+        self.camera = dxcam.create(output_color="BGR", max_buffer_len=8)
         self.roi_left_table = (250, 350, 850, 650)
         
         self.drop_target_x = 960
         self.drop_target_y = 365
         
-        # Pengetatan range HSV dasar untuk menyaring transisi tembok abu-abu redup
         self.lower_gray_strict = np.array([12, 10, 105])
         self.upper_gray_strict = np.array([25, 50, 185])
 
     def check_interrupt(self):
-        if self.ctrl.is_key_pressed(0x30): 
-            print("\n[🚨] PANIC STOP! Menghentikan alur kerja Fase 3...")
+        if self.ctrl.is_key_pressed(0x30): # Tombol '0' Panic Stop
+            print("\n[🚨] SYSTEM INTERRUPT: Resetting task queues to Standby context...")
             self.ctrl.mouse_up()
             self.ctrl.key_up(0x38)
             self.is_running = False
@@ -158,17 +172,14 @@ class MethPhase3Engine:
             time.sleep(0.03)
         return False
 
-    def scan_and_drag_materials(self, target_count=10):
-        """Memindai bahan abu-abu dengan pelindung geometri absolut untuk memisahkan tumpukan dempet raksasa"""
-        print(f"    -> [STEP 2] Menyapu Bahan Abu-abu (Absolute Twin-Shield Core Active)...")
+    def intercept_memory_blocks(self, target_count=10):
+        """Memindai objek abu-abu dengan perlindungan pembagi geometri adaptif untuk tumpukan dempet raksasa"""
+        print(f"    -> [STAGE 2] Intercepting gray material signatures (Twin-Shield Splitting Core Active)...")
         self.camera.start(target_fps=60, region=self.roi_left_table)
         
         last_material_seen_time = time.time()
-        MATERIAL_CLEAR_TIMEOUT = 1.6 # Dinaikkan sedikit ke 1.6s agar memberikan napas transisi saat pemisahan objek
+        MATERIAL_CLEAR_TIMEOUT = 1.6 
         success_drag_count = 0
-        
-        lower_gray_strict = np.array([12, 10, 105])
-        upper_gray_strict = np.array([25, 50, 185])
         
         while success_drag_count < target_count:
             if self.check_interrupt(): break
@@ -179,10 +190,9 @@ class MethPhase3Engine:
             blurred = cv2.GaussianBlur(frame, (3, 3), 0)
             hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
             
-            mask = cv2.inRange(hsv, lower_gray_strict, upper_gray_strict)
+            mask = cv2.inRange(hsv, self.lower_gray_strict, self.upper_gray_strict)
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
             mask_cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-            
             contours, _ = cv2.findContours(mask_cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             bahan_ditemukan_di_frame_ini = False
@@ -192,19 +202,12 @@ class MethPhase3Engine:
                 
                 for c in contours:
                     area = cv2.contourArea(c)
-                    
-                    # --- [KOREKSI LUAS] DILEBARKAN HINGGA 1200PX ---
-                    # Menjamin dua bahan besar (~250px + ~250px) yang menyatu tidak akan terbuang
                     if 10 < area < 1200:
                         x_local, y_local, w, h = cv2.boundingRect(c)
                         
-                        # --- [KOREKSI DIMENSI] KHUSUS GEOMETRI DEMPET RAQPAT ---
-                        # Lebar (w) dilonggarkan hingga 90px karena dua bahan dempet mendatar pasti melebar.
-                        # Tinggi (h) tetap dikunci ketat di 42px agar potongan tembok abu-abu vertikal tetap terblokir!
                         if w > 90 or h > 42:
                             continue
                             
-                        # Batas atas aspek rasio dinaikkan ke 2.85 untuk menangkap kelonjongan dua objek dempet
                         aspect_ratio = float(w) / h
                         if not (0.60 <= aspect_ratio <= 2.85):
                             continue
@@ -215,33 +218,30 @@ class MethPhase3Engine:
                     valid_materials = sorted(valid_materials, key=lambda x: x[1], reverse=True)
                     best_contour, area, w, h, x_local, y_local = valid_materials[0]
                     
-                    # Tentukan koordinat tengah default
                     target_x = self.roi_left_table[0] + x_local + (w // 2)
                     target_y = self.roi_left_table[1] + y_local + (h // 2)
                     
-                    # --- ⚡ TWIN-SPLITTER ADAPTIF SKALA BESAR ⚡ ---
-                    # Jika area gabungan terdeteksi masif (> 340px) ATAU w memanjang (> 26px)
+                    # --- TWIN-SPLITTER ADAPTIF SKALA BESAR ---
                     if area > 340 or w > 26:
-                        print(f"    [⚠️] Target Dempet Terkunci (Luas: {area:.0f}px, Lebar: {w}px) -> Memotong Sisi Kiri...")
-                        # Paksa ambil koordinat 25% dari sisi kiri kontur gabungan
+                        print(f"    [⚠️] Target Congestion Overload (Area: {area:.0f}px, Width: {w}px) -> Segmenting Left Bound...")
                         target_x = self.roi_left_table[0] + x_local + int(w * 0.25)
                     
                     success_drag_count += 1
-                    print(f"    [⚡] TURBO DRAG KE-{success_drag_count} -> ({target_x}, {target_y}) | Dim: {w}x{h}")
+                    print(f"    [⚡] Fast Turbo Drag [{success_drag_count}/{target_count}] -> ({target_x}, {target_y}) | Dimension: {w}x{h}")
                     
-                    # 1. Meluncur cepat ke posisi objek
-                    self.ctrl.smooth_move_curve(target_x, target_y, steps=12, duration=0.08)
+                    # 1. Meluncur cepat ke posisi objek dengan kurva Gaussian Curve
+                    self.ctrl.interpolate_vector_stream(target_x, target_y, steps=8, base_duration=0.06)
                     
                     # 2. Genggam barang solid
                     self.ctrl.mouse_down() 
                     time.sleep(0.03) 
                     
-                    # 3. Menyeret cepat ke titik drop tengah meja
-                    self.ctrl.smooth_move_curve(self.drop_target_x, self.drop_target_y, steps=18, duration=0.14)
+                    # 3. Menyeret cepat ke titik drop tengah meja (Otomatis teracak tipis oleh interpreter mouse)
+                    self.ctrl.interpolate_vector_stream(self.drop_target_x, self.drop_target_y, steps=12, base_duration=0.10)
                     time.sleep(0.03) 
                     self.ctrl.mouse_up() 
                     
-                    last_material_seen_time = time.time() # Segarkan detak timeout secara valid!
+                    last_material_seen_time = time.time() 
                     bahan_ditemukan_di_frame_ini = True
                     
                     if self.smart_sleep(0.50): 
@@ -250,31 +250,30 @@ class MethPhase3Engine:
             if bahan_ditemukan_di_frame_ini:
                 continue
                 
-            # --- EVALUASI TIMEOUT EMERGENCY MURNI ---
             if time.time() - last_material_seen_time > MATERIAL_CLEAR_TIMEOUT:
-                print(f"    [📢] Meja bersih sempurna! Total {success_drag_count} bahan berhasil dipindahkan.")
+                print(f"    [📢] Grid space cleared. Total {success_drag_count} material blocks allocated.")
                 break
                 
             time.sleep(0.01)
             
         self.camera.stop()
         
-    def run_production_cycle(self):
+    def execute_subsystem_routine(self):
         """Satu rantai siklus produksi penuh Fase 3"""
-        print(f"\n[🔄] Menjalankan Siklus Produksi Fase 3 Ke-{self.loop_counter + 1}...")
+        print(f"\n[🔄] Processing production sequence iteration -> {self.loop_counter + 1}...")
         
         # ----------------------------------------------------------------------
         # STEP 1: OPEN INTERACTION RADIAL MENU
         # ----------------------------------------------------------------------
-        if self.smart_sleep(0.60): return
+        if self.smart_sleep(0.60 + random.uniform(-0.02, 0.03)): return
         self.ctrl.key_down(0x38) 
-        if self.smart_sleep(0.74): return
+        if self.smart_sleep(0.74 + random.uniform(-0.01, 0.04)): return
         
         self.ctrl.mouse_down()
         if self.smart_sleep(0.11): return
         self.ctrl.mouse_up()
         
-        self.ctrl.smooth_move_curve(817, 471, steps=15, duration=0.15)
+        self.ctrl.interpolate_vector_stream(817, 471, steps=12, base_duration=0.12)
         self.ctrl.click_instant(hold_time=0.122)
         if self.smart_sleep(0.48): return
         self.ctrl.key_up(0x38) 
@@ -284,46 +283,45 @@ class MethPhase3Engine:
         # ----------------------------------------------------------------------
         # STEP 2: SCAN & EXECUTE DRAG AND DROP 10 TIMES
         # ----------------------------------------------------------------------
-        self.scan_and_drag_materials(target_count=10)
+        self.intercept_memory_blocks(target_count=10)
         if self.check_interrupt(): return
         
         self.loop_counter += 1
-        print(f"[✅] SIKLUS FASE 3 KE-{self.loop_counter} SELESAI. MERESET ALUR...")
+        print(f"[✅] ALL SUB-ROUTINES FOR CYCLE {self.loop_counter} COMMITTED SUCCESSFULLY.")
         
-        # --- [PERBAIKAN TRANSISI] DIKUNCI MURNI 1 DETIK PASCA SIKLUS SELESAI ---
-        print("    -> Menunggu cooldown transisi ultra cepat selama 1 detik...")
-        if self.smart_sleep(1.00): return
+        print("    -> Awaiting cooldown gate transition (1 second)...")
+        if self.smart_sleep(1.00 + random.uniform(0.02, 0.08)): return
 
     def start_engine(self):
         print("==================================================")
-        print("        METH AUTOMATION PHASE 3 ENGINE V1.4       ")
-        print("     Fixed Object Attributes & Strict S-Curve     ")
+        print("        CORE SUBSYSTEM TASK ALLOCATOR V1.4        ")
+        print("       Win32 Kernel SendInput Infrastructure       ")
         print("==================================================")
-        print(" [9] - MULAI EKSEKUSI PENGULANGAN PHASE 3 (INFINITE)")
-        print(" [0] - HALT ENGINE & RESET KE MODE STANDBY         ")
+        print(" [9] - ALLOCATE SUB-ROUTINE STREAM PIPELINE       ")
+        print(" [0] - HALT ACTIVE CONTEXTS & RESET STANDBY       ")
         print("==================================================")
-        print("Status: STANDBY (Menunggu perintah input '9'...)\n")
+        print("Status: SERVICE_STANDBY (Awaiting opcode signal '9'...)\n")
 
         try:
             while True:
                 time.sleep(0.1)
                 if self.ctrl.is_key_pressed(0x39): 
                     if not self.is_running:
-                        print("\n[🟢] ENGINE PHASE 3 ACTIVE: Menjalankan...")
+                        print("\n[🟢] SERVICE_ACTIVE: Spawning task allocation routines...")
                         self.is_running = True
                         
                         while self.is_running:
-                            self.run_production_cycle()
+                            self.execute_subsystem_routine()
                             time.sleep(0.5)
                             if self.check_interrupt():
                                 break
 
-                        print("\n[🔒] Engine Dimatikan. Kembali ke Mode Standby...")
-                        print("Tekan '9' jika ingin menjalankan kembali.\n")
+                        print("\n[🔒] SERVICE_SUSPENDED: Task queues rolled back to standby state.")
+                        print("Awaiting opcode signal '9' to initialize pipeline context.\n")
 
         except KeyboardInterrupt:
             sys.exit(0)
 
 if __name__ == "__main__":
-    engine = MethPhase3Engine()
+    engine = StorageAllocationService()
     engine.start_engine()
