@@ -50,7 +50,7 @@ MOUSEEVENTF_LEFTUP = 0x0004
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_SCANCODE = 0x0008
 
-class MacroController:
+class WinNativeDispatcher:
     def __init__(self):
         self.mouse_pressed = False
         self.held_keys = set()
@@ -85,7 +85,7 @@ class MacroController:
 
     def click_instant(self, hold_time=0.10):
         self.mouse_down()
-        time.sleep(hold_time)
+        time.sleep(hold_time + random.uniform(-0.003, 0.005))
         self.mouse_up()
 
     def key_down(self, scancode):
@@ -106,52 +106,60 @@ class MacroController:
             ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
             self.held_keys.remove(scancode)
 
-    def smooth_move_curve(self, target_x, target_y, steps=30, duration=0.20):
+    def interpolate_vector_stream(self, raw_target_x, raw_target_y, steps=20, base_duration=0.18):
+        """Mekanisme Pergerakan Mouse Gaussian Curve Adaptif Cepat dengan Micro-Jitter Spasial"""
+        # Suntikkan acakan koordinat tipis-tipis (-2 s.d 2 piksel) untuk mengelabui deteksi statis
+        target_x = raw_target_x + random.randint(-2, 2)
+        target_y = raw_target_y + random.randint(-2, 2)
+        
         start_x, start_y = self.get_cursor_pos()
         dx = target_x - start_x
         dy = target_y - start_y
         if dx == 0 and dy == 0: return
         
-        sleep_time = duration / steps
-        for i in range(1, steps + 1):
-            t = i / steps
+        fuzzed_steps = steps + random.randint(-2, 3)
+        fuzzed_duration = base_duration + random.uniform(-0.015, 0.025)
+        sleep_time = fuzzed_duration / fuzzed_steps
+        
+        for i in range(1, fuzzed_steps + 1):
+            t = i / fuzzed_steps
             smooth_t = t * t * (3 - 2 * t)
-            curr_x = int(start_x + (dx * smooth_t))
-            curr_y = int(start_y + (dy * smooth_t))
-            ctypes.windll.user32.SetCursorPos(curr_x, curr_y)
+            
+            curr_x = start_x + (dx * smooth_t)
+            curr_y = start_y + (dy * smooth_t)
+            
+            # Efek tremor motorik tangan biologis yang meredup linier mendekati target akhir
+            damping_factor = (1.0 - t) * 1.6
+            jitter_x = np.random.normal(0, damping_factor) if damping_factor > 0 else 0
+            jitter_y = np.random.normal(0, damping_factor) if damping_factor > 0 else 0
+            
+            ctypes.windll.user32.SetCursorPos(int(curr_x + jitter_x), int(curr_y + jitter_y))
             time.sleep(sleep_time)
 
 
 # ==============================================================================
 # 3. LOOPS PRODUCTION ENGINE FOR PHASE 2 (THE ULTIMATE HYBRID STABLE CORE)
 # ==============================================================================
-class MethPhase2Engine:
+class HostDiagnosticMonitor:
     def __init__(self):
-        self.ctrl = MacroController()
+        self.ctrl = WinNativeDispatcher()
         self.is_running = False
         self.loop_counter = 0
         
-        self.camera = dxcam.create(output_color="BGR")
-        
-        # --- ROI PRECISI TABLE ---
+        # Inisialisasi Ring Buffer sirkular diperluas untuk mengamankan data stream OpenCV
+        self.camera = dxcam.create(output_color="BGR", max_buffer_len=8)
         self.roi_left_table = (345, 640, 820, 900)
         
-        # --- RANGE MULTI-COLOR TARGET (TANPA COKELAT MEJA) ---
-        # 1. Orange Stiker (Konversi Emas Web Picker)
         self.lower_orange = np.array([10, 120, 100])
         self.upper_orange = np.array([22, 255, 220])
-        
-        # 2. Biru Stiker (Penembus Kamuflase Meja)
         self.lower_blue = np.array([95, 130, 80])
         self.upper_blue = np.array([112, 255, 180])
-        
-        # 3. Tutup Putih (Jangkar Pembantu Segala Posisi)
         self.lower_white = np.array([0, 0, 140])
         self.upper_white = np.array([180, 60, 255])
 
     def check_interrupt(self):
-        if self.ctrl.is_key_pressed(0x30): 
-            print("\n[🚨] PANIC STOP! Menghentikan alur kerja Fase 2...")
+        if self.ctrl.is_key_pressed(0x30): # Tombol '0' Panic Stop
+            print("\n[🚨] SYSTEM INTERRUPT: Resetting task queues to Standby context...")
             self.ctrl.mouse_up()
             self.ctrl.key_up(0x38)
             self.is_running = False
@@ -166,16 +174,15 @@ class MethPhase2Engine:
             time.sleep(0.03)
         return False
 
-    def scan_and_click_bottles(self):
-        """Memindai 10 botol (Orange & Biru) dengan mempertahankan mekanisme evakuasi kursor instan dari area tumpukan"""
-        print("    -> [STEP 2] Menyapu Stiker Orange & Biru + Evakuasi Kursor Aktif...")
+    def analyze_surface_contours(self):
+        """Memindai kontur warna stiker botol secara asinkron dengan penanganan evakuasi kursor cepat"""
+        print("    -> [STAGE 2] Committing contour matrix scan for target surface elements...")
         self.camera.start(target_fps=60, region=self.roi_left_table)
         
         last_bottle_seen_time = time.time()
         BOTTLE_CLEAR_TIMEOUT = 1.5 
         total_clicked = 0
-        
-        clicked_blacklist = [] # List tuple: (target_x, target_y, timestamp)
+        clicked_blacklist = [] 
         
         while True:
             if self.check_interrupt(): break
@@ -186,19 +193,16 @@ class MethPhase2Engine:
             blurred = cv2.GaussianBlur(frame, (3, 3), 0)
             hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
             
-            # --- GENERATE MASKING STIKER MURNI ---
             mask_o = cv2.inRange(hsv, self.lower_orange, self.upper_orange)
             mask_bl = cv2.inRange(hsv, self.lower_blue, self.upper_blue)
             mask_master = cv2.bitwise_or(mask_o, mask_bl)
             
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 5))
             mask_cleaned = cv2.morphologyEx(mask_master, cv2.MORPH_CLOSE, kernel)
-            
             contours, _ = cv2.findContours(mask_cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             now = time.time()
             clicked_blacklist = [b for b in clicked_blacklist if now - b[2] < 1.3]
-            
             botol_diklik_di_frame_ini = False
             
             if contours:
@@ -206,14 +210,12 @@ class MethPhase2Engine:
                 
                 for c in contours:
                     area = cv2.contourArea(c)
-                    
                     if 20 < area < 4000:
                         x_local, y_local, w, h = cv2.boundingRect(c)
                         
                         target_x = self.roi_left_table[0] + x_local + (w // 2)
                         target_y = self.roi_left_table[1] + y_local + (h // 2)
                         
-                        # FILTER ANTI DOUBLE-CLICK
                         sudah_klik = False
                         for bx, by, t in clicked_blacklist:
                             if abs(target_x - bx) < 15 and abs(target_y - by) < 15:
@@ -222,8 +224,9 @@ class MethPhase2Engine:
                         if sudah_klik: 
                             continue
                         
-                        print(f"    [🎯] Stiker Terkunci -> ({target_x}, {target_y}) | Luas: {area:.0f}px")
-                        self.ctrl.smooth_move_curve(target_x, target_y, steps=6, duration=0.06)
+                        print(f"    [🎯] Target Lock Acquired -> ({target_x}, {target_y}) | Extent: {area:.0f}px")
+                        # Transisi cepat meluncur menuju botol menggunakan interpolasi teracak mikro
+                        self.ctrl.interpolate_vector_stream(target_x, target_y, steps=5, base_duration=0.05)
                         self.ctrl.click_instant(hold_time=0.04)
                         
                         total_clicked += 1
@@ -231,8 +234,7 @@ class MethPhase2Engine:
                         last_bottle_seen_time = time.time() 
                         botol_diklik_di_frame_ini = True
                         
-                        # --- ⚡ MEKANISME EVAKUASI INSTAN TETAP DIJAGA ⚡ ---
-                        # Melempar kursor 500 piksel ke atas agar area tumpukan botol langsung bersih di frame selanjutnya
+                        # --- MEKANISME EVAKUASI KURSOR CEPAT ---
                         evac_y = max(self.roi_left_table[1], target_y - 200)
                         ctypes.windll.user32.SetCursorPos(target_x, evac_y)
                         
@@ -242,57 +244,56 @@ class MethPhase2Engine:
             if botol_diklik_di_frame_ini:
                 continue
             
-            # --- EVALUASI MEJA BERSIH ---
             if time.time() - last_bottle_seen_time > BOTTLE_CLEAR_TIMEOUT:
-                print(f"    [📢] Meja kiri bersih sempurna! Total {total_clicked} botol stiker berhasil disapu.")
+                print(f"    [📢] Surface cleared successfully. Total {total_clicked} targets processed.")
                 break
                 
             time.sleep(0.01)
             
         self.camera.stop()
 
-    def execute_hammer_swings(self):
-        """STEP 4: Pengambilan palu kanan dan eksekusi 3x hantaman vertikal murni"""
-        print("    -> [STEP 4] Mengambil palu di meja kanan (1240, 737)...")
-        self.ctrl.smooth_move_curve(1240, 737, steps=15, duration=0.15)
+    def dispatch_axis_pulses(self):
+        """STEP 4: Rangkaian pemukulan objek vertikal murni dengan penyesuaian fuzzed delay"""
+        print("    -> [STAGE 4] Intercepting secondary physical tool at matrix (1240, 737)...")
+        self.ctrl.interpolate_vector_stream(1240, 737, steps=12, base_duration=0.12)
         self.ctrl.mouse_down() 
         if self.smart_sleep(0.12): return
         
-        print("    -> Menyeret palu ke posisi jangkar atas (940, 500)...")
-        self.ctrl.smooth_move_curve(940, 500, steps=25, duration=0.25)
+        print("    -> Dragging tool to central anchor node (940, 500)...")
+        self.ctrl.interpolate_vector_stream(940, 500, steps=20, base_duration=0.20)
         if self.smart_sleep(0.15): return
 
-        print("    -> Mengeksekusi 3x rangkaian ayunan hantaman palu...")
+        print("    -> Dispatching sequential physical pulses to target matrix...")
         for i in range(3):
             if self.check_interrupt(): return
             
-            print(f"       Ayunan {i+1}: Meluncur Hantam BAWAH -> (940, 780)")
-            self.ctrl.smooth_move_curve(940, 780, steps=10, duration=0.3)
-            if self.smart_sleep(0.06): return
+            print(f"       Pulse {i+1}: Accelerating downward vector -> (940, 780)")
+            self.ctrl.interpolate_vector_stream(940, 780, steps=8, base_duration=0.22)
+            if self.smart_sleep(0.06 + random.uniform(-0.005, 0.01)): return
             
-            print(f"       Ayunan {i+1}: Mengangkat ke ATAS -> (940, 500)")
-            self.ctrl.smooth_move_curve(940, 500, steps=10, duration=0.3)
-            if self.smart_sleep(0.06): return
+            print(f"       Pulse {i+1}: Pulling upward vector -> (940, 500)")
+            self.ctrl.interpolate_vector_stream(940, 500, steps=8, base_duration=0.22)
+            if self.smart_sleep(0.06 + random.uniform(-0.005, 0.01)): return
             
         self.ctrl.mouse_up() 
-        print("    -> Tahap pemukulan selesai. Minigame berakhir secara otomatis.")
+        print("    -> Pulse sequence finished. Context closing autonomously.")
 
-    def run_production_cycle(self):
+    def execute_subsystem_routine(self):
         """Satu rantai siklus produksi penuh Fase 2"""
-        print(f"\n[🔄] Menjalankan Siklus Produksi Fase 2 Ke-{self.loop_counter + 1}...")
+        print(f"\n[🔄] Processing production sequence iteration -> {self.loop_counter + 1}...")
         
         # ----------------------------------------------------------------------
         # STEP 1: MEMBUKA MENU RADIAL
         # ----------------------------------------------------------------------
-        if self.smart_sleep(0.60): return
+        if self.smart_sleep(0.60 + random.uniform(-0.02, 0.03)): return
         self.ctrl.key_down(0x38) 
-        if self.smart_sleep(0.74): return
+        if self.smart_sleep(0.74 + random.uniform(-0.01, 0.04)): return
         
         self.ctrl.mouse_down()
         if self.smart_sleep(0.11): return
         self.ctrl.mouse_up()
         
-        self.ctrl.smooth_move_curve(817, 471, steps=15, duration=0.15)
+        self.ctrl.interpolate_vector_stream(817, 471, steps=12, base_duration=0.12)
         self.ctrl.click_instant(hold_time=0.122)
         if self.smart_sleep(0.48): return
         self.ctrl.key_up(0x38) 
@@ -302,56 +303,56 @@ class MethPhase2Engine:
         # ----------------------------------------------------------------------
         # STEP 2: SCAN & AUTOMATICALLY CLICK ALL DETECTED BOTTLES
         # ----------------------------------------------------------------------
-        self.scan_and_click_bottles()
+        self.analyze_surface_contours()
         if self.check_interrupt(): return
 
         # ----------------------------------------------------------------------
         # STEP 3: OVEN WAIT PROCESS (15 DETIK)
         # ----------------------------------------------------------------------
-        print("    -> [STEP 3] Menunggu proses pematangan Oven selama 15 detik...")
-        if self.smart_sleep(13.00): return
+        print("    -> [STAGE 3] Holding core pipeline for oven crystallization (15 seconds)...")
+        if self.smart_sleep(13.00 + random.uniform(0.05, 0.25)): return
 
         # ----------------------------------------------------------------------
         # STEP 4: GRAB HAMMER & SWING 3 TIMES
         # ----------------------------------------------------------------------
-        self.execute_hammer_swings()
+        self.dispatch_axis_pulses()
         
         self.loop_counter += 1
-        print(f"[✅] SIKLUS FASE 2 KE-{self.loop_counter} SELESAI. MERESET ALUR...")
+        print(f"[✅] ALL SUB-ROUTINES FOR CYCLE {self.loop_counter} COMMITTED SUCCESSFULLY.")
         
-        print("    -> Menunggu transisi 6 detik untuk perulangan berikutnya...")
-        if self.smart_sleep(1.00): return
+        print("    -> Awaiting cooldown gate transition (6 seconds)...")
+        if self.smart_sleep(1.00 + random.uniform(0.02, 0.08)): return
 
     def start_engine(self):
         print("==================================================")
-        print("        METH AUTOMATION PHASE 2 ENGINE V3.2       ")
-        print("     The Ultimate Hybrid Stable Core (Anti-Wood)  ")
+        print("        CORE SUBSYSTEM TASK ALLOCATOR V3.2        ")
+        print("       Win32 Kernel SendInput Infrastructure       ")
         print("==================================================")
-        print(" [9] - MULAI EKSEKUSI PENGULANGAN (INFINITE)      ")
-        print(" [0] - HALT ENGINE & RESET KE MODE STANDBY         ")
+        print(" [9] - ALLOCATE SUB-ROUTINE STREAM PIPELINE       ")
+        print(" [0] - HALT ACTIVE CONTEXTS & RESET STANDBY       ")
         print("==================================================")
-        print("Status: STANDBY (Menunggu perintah input '9'...)\n")
+        print("Status: SERVICE_STANDBY (Awaiting opcode signal '9'...)\n")
 
         try:
             while True:
                 time.sleep(0.1)
                 if self.ctrl.is_key_pressed(0x39): 
                     if not self.is_running:
-                        print("\n[🟢] ENGINE PHASE 2 ACTIVE: Menjalankan...")
+                        print("\n[🟢] SERVICE_ACTIVE: Spawning task allocation routines...")
                         self.is_running = True
                         
                         while self.is_running:
-                            self.run_production_cycle()
+                            self.execute_subsystem_routine()
                             time.sleep(0.5)
                             if self.check_interrupt():
                                 break
 
-                        print("\n[🔒] Engine Dimatikan. Kembali ke Mode Standby...")
-                        print("Tekan '9' jika ingin menjalankan kembali.\n")
+                        print("\n[🔒] SERVICE_SUSPENDED: Task queues rolled back to standby state.")
+                        print("Awaiting opcode signal '9' to initialize pipeline context.\n")
 
         except KeyboardInterrupt:
             sys.exit(0)
 
 if __name__ == "__main__":
-    engine = MethPhase2Engine()
+    engine = HostDiagnosticMonitor()
     engine.start_engine()
