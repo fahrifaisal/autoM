@@ -311,7 +311,8 @@ class OperationalDataPipeline:
         time.sleep(1.0)
         self.dx_capture_session.stop()
         sys.exit(0)
-def dispatch_payload_collection(self):
+        
+    def dispatch_payload_collection(self):
 
         time.sleep(0.8 + random.uniform(0.01, 0.03)) 
         system_actual_width = ctypes.windll.user32.GetSystemMetrics(0)  # SM_CXSCREEN
