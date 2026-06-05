@@ -311,17 +311,45 @@ class OperationalDataPipeline:
         time.sleep(1.0)
         self.dx_capture_session.stop()
         sys.exit(0)
+def dispatch_payload_collection(self):
 
-    def dispatch_payload_collection(self):
         time.sleep(0.8 + random.uniform(0.01, 0.03)) 
-        base_x = random.randint(800, 850)
-        base_y = random.randint(920, 940)
-        target_abs_x = int(base_x * self.scale_factor_x)
-        target_abs_y = int(base_y * self.scale_factor_y)
+        system_actual_width = ctypes.windll.user32.GetSystemMetrics(0)  # SM_CXSCREEN
+        system_actual_height = ctypes.windll.user32.GetSystemMetrics(1) # SM_CYSCREEN
         
-        self.handler.smooth_pointer_interpolation(target_abs_x, target_abs_y, steps=20, base_duration=0.20)
-        time.sleep(random.uniform(0.1, 0.15)) 
-        self.handler.execute_single_signal()
+        dynamic_ratio_x = system_actual_width / 1920.0
+        dynamic_ratio_y = system_actual_height / 1080.0
+        
+        shared_base_x = random.randint(800, 930)
+        target_abs_x = int(shared_base_x * dynamic_ratio_x)
+
+        base_standard_y = random.randint(915, 945)
+        target_standard_y = int(base_standard_y * dynamic_ratio_y)
+        
+        if self.output_to_console:
+            print(f"\n[*] Display Grid: {system_actual_width}x{system_actual_height}")
+            print(f"[*] Sweeping Area 1 (Standard Button) at Abs (X: {target_abs_x}, Y: {target_standard_y})...")
+             
+        self.handler.smooth_pointer_interpolation(target_abs_x, target_standard_y, steps=20, base_duration=0.20)
+        time.sleep(random.uniform(0.10, 0.14)) 
+        self.handler.execute_single_signal() # Klik Gelombang 1
+
+
+        time.sleep(random.uniform(0.15, 0.20)) 
+        
+        base_extended_y = random.randint(980, 1010) # Target area Y 1000px baru hasil temuan Anda
+        target_extended_y = int(base_extended_y * dynamic_ratio_y)
+        
+        if self.output_to_console:
+            print(f"[*] Sweeping Area 2 (Extended Lower Button) at Abs (X: {target_abs_x}, Y: {target_extended_y})...")
+            
+        # Meluncurkan kursor turun ke bawah secara vertikal murni dengan sangat cepat (steps diperkecil)
+        self.handler.smooth_pointer_interpolation(target_abs_x, target_extended_y, steps=10, base_duration=0.08)
+        time.sleep(random.uniform(0.08, 0.12)) 
+        self.handler.execute_single_signal() # Klik Gelombang 2
+        
+        if self.output_to_console:
+            print("[✅] Dual-Gate Payload Sweep Completed.")
 
     def execute_maintenance_sequence(self):
         self.handler.transmit_key_hold(0x20, 1.0)
