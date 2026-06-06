@@ -211,10 +211,10 @@ class KernelTaskScheduler:
         start_scroll_b1 = time.time()
         for _ in range(18):
             self.ctrl.scroll_wheel(-1)
-            time.sleep(0.04 + random.uniform(-0.003, 0.004)) 
+            time.sleep(0.04 + random.uniform(-0.003, 0.002)) 
             
         elapsed_scroll_b1 = time.time() - start_scroll_b1
-        remaining_hold_b1 = max(0.01, 3.7 - 0.35 - elapsed_scroll_b1)
+        remaining_hold_b1 = max(0.01, 4.6 - 0.35 - elapsed_scroll_b1)
         if self.smart_sleep(remaining_hold_b1): return
         
         self.ctrl.mouse_up() 
@@ -234,10 +234,10 @@ class KernelTaskScheduler:
         start_scroll_b2 = time.time()
         for _ in range(18):
             self.ctrl.scroll_wheel(-1)
-            time.sleep(0.04 + random.uniform(-0.003, 0.004))
+            time.sleep(0.04 + random.uniform(-0.003, 0.002))
             
         elapsed_scroll_b2 = time.time() - start_scroll_b2
-        remaining_hold_b2 = max(0.01, 3.7 - 0.35 - elapsed_scroll_b2)
+        remaining_hold_b2 = max(0.01, 4.6 - 0.35 - elapsed_scroll_b2)
         if self.smart_sleep(remaining_hold_b2): return
         
         self.ctrl.mouse_up() 
@@ -254,7 +254,7 @@ class KernelTaskScheduler:
         self.ctrl.interpolate_vector_stream(970, 341, steps=35, base_duration=0.45) 
         if self.smart_sleep(0.15): return
         self.ctrl.mouse_up() 
-        if self.smart_sleep(0.56 + random.uniform(-0.02, 0.03)): return
+        if self.smart_sleep(0.56 + random.uniform(-0.02, 0.02)): return
         
         # ----------------------------------------------------------------------
         # STEP 5: FINALISASI
@@ -272,7 +272,7 @@ class KernelTaskScheduler:
         print(f"[✅] ALL SUB-ROUTINES FOR CYCLE {self.loop_counter} COMMITTED SUCCESSFULLY.")
         
         print("    -> Awaiting cooldown gate transition (6 seconds)...")
-        if self.smart_sleep(6.00 + random.uniform(-0.05, 0.15)): return
+        if self.smart_sleep(6.50 + random.uniform(-0.05, 0.15)): return
 
     def start_engine(self):
         print("==================================================")
