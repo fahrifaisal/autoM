@@ -214,7 +214,7 @@ class KernelTaskScheduler:
             time.sleep(0.04 + random.uniform(-0.003, 0.002)) 
             
         elapsed_scroll_b1 = time.time() - start_scroll_b1
-        remaining_hold_b1 = max(0.01, 4.6 - 0.35 - elapsed_scroll_b1)
+        remaining_hold_b1 = max(0.01, 4.8 - 0.35 - elapsed_scroll_b1)
         if self.smart_sleep(remaining_hold_b1): return
         
         self.ctrl.mouse_up() 
@@ -237,7 +237,7 @@ class KernelTaskScheduler:
             time.sleep(0.04 + random.uniform(-0.003, 0.002))
             
         elapsed_scroll_b2 = time.time() - start_scroll_b2
-        remaining_hold_b2 = max(0.01, 4.6 - 0.35 - elapsed_scroll_b2)
+        remaining_hold_b2 = max(0.01, 4.8 - 0.35 - elapsed_scroll_b2)
         if self.smart_sleep(remaining_hold_b2): return
         
         self.ctrl.mouse_up() 
