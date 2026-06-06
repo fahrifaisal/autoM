@@ -72,7 +72,6 @@ class IOStreamController:
             ii_ = Input_I()
             ii_.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, ctypes.pointer(extra))
             x = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
-            # FIX NAMESPACE: Dipastikan menggunakan ctypes.sizeof() murni C-struct
             ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
             self.io_state_active = True
 
@@ -82,7 +81,6 @@ class IOStreamController:
             ii_ = Input_I()
             ii_.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, ctypes.pointer(extra))
             x = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
-            # FIX NAMESPACE: Dipastikan menggunakan ctypes.sizeof() murni C-struct
             ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
             self.io_state_active = False
 
@@ -164,11 +162,12 @@ class OperationalDataPipeline:
         
         self.initialize_configuration_profile()
         
+        # Batas vertikal dikunci di 1050px murni agar mencakup area bawah layar game
         self.capture_bounds = (
             int(600 * self.scale_factor_x), 
             int(250 * self.scale_factor_y), 
             int(1200 * self.scale_factor_x), 
-            int(900 * self.scale_factor_y)
+            int(1050 * self.scale_factor_y)
         )
         
         self.dx_capture_session = None
@@ -190,17 +189,17 @@ class OperationalDataPipeline:
         self.dx_capture_session.start(target_fps=self.pipeline_fps, region=self.capture_bounds)
         time.sleep(1.5)
 
-        self.lower_tier_g = np.array([0, 120, 165]) 
+        self.lower_tier_g = np.array([0, 120, 165])
         self.upper_tier_g = np.array([50, 255, 255])
         self.lower_tier_w = np.array([0, 0, 160])
         self.upper_tier_w = np.array([179, 50, 255])
         
-        # Range deteksi HSV Tombol Collect Putih (Berdasarkan color picker Anda)
-        self.lower_collect_white = np.array([0, 0, 160])
-        self.upper_collect_white = np.array([180, 40, 255])
+        # Range HSV fleksibel menangkap piksel putih teks (0, 0, 100) hingga batas atas bender
+        self.lower_collect_white = np.array([0, 0, 180])
+        self.upper_collect_white = np.array([0, 0, 255])
         
         self.current_node_state = "NODE_0_IDLE"
-        self.verbosity_log_active = True 
+        self.verbosity_log_active = True
         
         self.sys_flag_8 = False
         self.routine_switch_active = False
@@ -227,17 +226,17 @@ class OperationalDataPipeline:
                 'SCREEN_WIDTH': '1920',
                 'SCREEN_HEIGHT': '1080',
                 'TARGET_FPS': '60',            
-                'STALL_FRAMES': '9999',          
-                'ABSOLUTE_MAX_GREEN': '360',  
-                'SUCCESS_THRESHOLD': '390',   
+                'STALL_FRAMES': '9999',         
+                'ABSOLUTE_MAX_GREEN': '360', 
+                'SUCCESS_THRESHOLD': '390',  
                 'SAFETY_BUFFER': '15',
                 'MAX_BAND_HIGH': '100',
                 'MIN_SWING': '120',
                 'TIGHT_GRIP_THRESHOLD': '80',
                 'TIGHT_GRIP_SWING': '50',
-                'TIMEOUT_SECONDS': '30',      
+                'TIMEOUT_SECONDS': '30',     
                 'AFK_INTERVAL_MINUTES': '40',
-                'CAST_DELAY_SECONDS': '5.0'   
+                'CAST_DELAY_SECONDS': '5.0'  
             }
             try:
                 with open(config_path, 'w') as configfile:
@@ -253,7 +252,7 @@ class OperationalDataPipeline:
         self.display_height = int(parser['ENGINE'].get('SCREEN_HEIGHT', '1080'))
         self.pipeline_fps = int(parser['ENGINE'].get('TARGET_FPS', '60'))
         self.runtime_stall_limit = int(parser['ENGINE'].get('STALL_FRAMES', '9999'))
-        self.max_timeout_threshold = int(parser['ENGINE'].get('TIMEOUT_SECONDS', '30')) 
+        self.max_timeout_threshold = int(parser['ENGINE'].get('TIMEOUT_SECONDS', '30'))
         self.routine_delay_interval = float(parser['ENGINE'].get('AFK_INTERVAL_MINUTES', '40'))
         self.allocation_sleep_delay = float(parser['ENGINE'].get('CAST_DELAY_SECONDS', '5.0'))
         
@@ -293,7 +292,7 @@ class OperationalDataPipeline:
     def execute_interface_sync(self):
         self.handler.dispatch_tap(0x42) # F8
         time.sleep(0.5)                
-        self.handler.write_buffer_sequence("fixui")   
+        self.handler.write_buffer_sequence("fixui")  
         time.sleep(0.2)
         self.handler.dispatch_tap(0x1C) # Enter
         time.sleep(0.6)                
@@ -312,14 +311,17 @@ class OperationalDataPipeline:
         self.dx_capture_session.stop()
         sys.exit(0)
         
+    # ==========================================================================
+    # CORE OPENCV SCANNER ENGINE: HIGH-RELIABILITY TEXT DETECTOR V5.5 (PURE GATE)
+    # ==========================================================================
     def dispatch_payload_collection(self):
         if self.output_to_console:
-            print("\n[🔍] Fase 3 Sukses. Memulai Pemindaian Spesifik Tombol Collect (Anti-Release Gate)...")
+            print("\n[🔍] Fase 3 Sukses. Memulai Pemindaian Blok Karakter Teks 'Keep'...")
             
         start_scan_window = time.time()
         button_clicked = False
         
-        while time.time() - start_scan_window < 3.5:
+        while time.time() - start_scan_window < 4.0: 
             if self.handler.verify_hardware_state(0x58): return
             
             collect_frame = self.dx_capture_session.get_latest_frame()
@@ -333,38 +335,41 @@ class OperationalDataPipeline:
             
             for c in contours:
                 area = cv2.contourArea(c)
-                if 100 < area < 3500:
+
+                if 3 < area < 100:
                     x_loc, y_loc, w_dim, h_dim = cv2.boundingRect(c)
                     
+                    # Proyeksi ke koordinat fisik monitor absolut global Windows
                     abs_x = self.capture_bounds[0] + x_loc + (w_dim // 2)
                     abs_y = self.capture_bounds[1] + y_loc + (h_dim // 2)
                     
-                    # Lock area geografis (X: 800-930, Y: 930-1010)
+                    # --- FILTER GEOMETRI 2: GERBANG ROI GEOMETRIS KOORDINAT UTAMA ---
                     min_allowed_x = int(800 * self.scale_factor_x)
                     max_allowed_x = int(930 * self.scale_factor_x)
                     min_allowed_y = int(930 * self.scale_factor_y)
                     max_allowed_y = int(1010 * self.scale_factor_y)
                     
-                    if not (min_allowed_x <= abs_x <= max_allowed_x) or not (min_allowed_y <= abs_y <= max_allowed_y):
-                        continue 
-                    
-                    if self.output_to_console:
-                        print(f"[🎯] TARGET COLLECT COGNIZED -> Abs(X: {abs_x}, Y: {abs_y}) | Extent: {area:.0f}px")
-                    
-                    time.sleep(random.uniform(0.15, 0.23))
-                    self.handler.smooth_pointer_interpolation(abs_x, abs_y, steps=18, base_duration=0.18)
-                    time.sleep(random.uniform(0.09, 0.13))
-                    self.handler.execute_single_signal()
-                    
-                    button_clicked = True
-                    break
+                    # Eksekusi interupsi hanya jika lolos uji kecerahan HSV murni dan masuk gerbang sakral
+                    if (min_allowed_x <= abs_x <= max_allowed_x) and (min_allowed_y <= abs_y <= max_allowed_y):
+                        if self.output_to_console:
+                            print(f"[🎯] TARGET 'KEEP' SECURED -> Abs(X: {abs_x}, Y: {abs_y}) | Pure Contour Area: {area:.0f}px")
+                        
+                        # Jeda ketukan natural meniru waktu reaksi mata biologis manusia
+                        time.sleep(random.uniform(0.15, 0.25))
+                        self.handler.smooth_pointer_interpolation(abs_x, abs_y, steps=18, base_duration=0.18)
+                        
+                        time.sleep(random.uniform(0.08, 0.12))
+                        self.handler.execute_single_signal() # KLIK KIRI UTAMA PENGUMPULAN IKAN
+                        
+                        button_clicked = True
+                        break
             
             if button_clicked:
                 break
             time.sleep(0.02)
             
         if not button_clicked and self.output_to_console:
-            print("\n[⚠️] Jendela waktu scan habis. Target tombol tidak terwujud di dalam gerbang ROI.")
+            print("\n[⚠️] Jendela waktu scan habis. Karakter teks 'Keep' tidak terwujud di dalam gerbang ROI.")
 
     def execute_maintenance_sequence(self):
         self.handler.transmit_key_hold(0x20, 1.0)
@@ -456,7 +461,7 @@ class OperationalDataPipeline:
                         self.sequential_timeout_anomalies = 0
                         process_text = "Awaiting inject activation trigger '3'..."
                         time.sleep(0.5) 
-                        continue 
+                        continue
 
                 if self.current_node_state == "NODE_0_IDLE":
                     process_text = "Awaiting inject activation trigger '3'..."
@@ -475,8 +480,8 @@ class OperationalDataPipeline:
                 # SEKTOR PRIORITAS 2: PENANGKAPAN CITRA DAN MANAGEMENT MEMORI
                 # ==============================================================
                 frame_packet = self.dx_capture_session.get_latest_frame()
-                if frame_packet is None: 
-                    time.sleep(0.001) 
+                if frame_packet is None:
+                    time.sleep(0.001)
                     continue
                     
                 sys_allocate_polymorphic_buffer()
@@ -687,14 +692,13 @@ class OperationalDataPipeline:
                                 self.state_cooldown_active = True 
                                 process_text = "CARRIER FLICKER FRAME INTERPOLATION"
                             else:
-                                self.handler.trigger_up_event()
                                 print(f"\n>>> PIPELINE TRANSITION LOSS.")
                                 print(f"    METRICS: Peak White: {self.peak_buffer_w_h}px | Peak Green: {self.peak_buffer_g_h}px | Target Base: >{self.VAL_THRESHOLD}px")
                                 
                                 if self.peak_buffer_w_h >= self.VAL_THRESHOLD: 
                                     print(f"    CYCLE STATUS: VALIDATED SUCCESS\n")
                                     
-                                    # Panggil fungsi scan adaptif OpenCV
+                                    # Memicu pemindaian teks adaptif OpenCV baru
                                     self.dispatch_payload_collection() 
                                     
                                     if self.routine_switch_active and (time.time() - self.last_routine_execution_timestamp) >= (self.routine_delay_interval * 60):
