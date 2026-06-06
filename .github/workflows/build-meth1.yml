@@ -1,0 +1,53 @@
+name: Nuitka-Meth-1
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-production-binaries:
+    name: Build Stealth Windows Binaries
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Repository Source Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python Environment (Stable Core)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Universal Application Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install numpy opencv-python dxcam configparser
+
+    # ==========================================================================
+    # VARIANT 1 COMPILATION: PHASE 1 KEYBOARD INTERRUPT CORE
+    # ==========================================================================
+    - name: Compile Variant 1 - Meth Phase 1 Stealth Binary
+      uses: Nuitka/Nuitka-Action@main
+      with:
+        nuitka-version: main
+        script-name: badside/meth_1.py
+        mode: onefile
+        lto: yes
+        enable-plugins: anti-bloat
+        output-file: Proses_1.exe
+
+    # ==========================================================================
+    # VERIFICATION & PACKAGING PHASE
+    # ==========================================================================
+    - name: Verify All Compiled Artifacts Presence
+      run: |
+        if (Test-Path "build/Proses_1.exe") { Write-Output "Phase 1 Binary Verified" } else { throw "Phase 1 Binary Missing" }
+
+    - name: Upload Cryptographic Stealth Production Binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: Meth 1
+        path: |
+          build/Proses_1.exe
+
+        if-no-files-found: error
+        retention-days: 7
