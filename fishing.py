@@ -72,7 +72,7 @@ class IOStreamController:
             ii_ = Input_I()
             ii_.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, ctypes.pointer(extra))
             x = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(x), sizeof(x))
             self.io_state_active = True
 
     def trigger_up_event(self):
@@ -81,7 +81,7 @@ class IOStreamController:
             ii_ = Input_I()
             ii_.mi = MouseInput(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, ctypes.pointer(extra))
             x = Input(ctypes.c_ulong(INPUT_MOUSE), ii_)
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(x), sizeof(x))
             self.io_state_active = False
 
     def execute_single_signal(self):
@@ -95,14 +95,14 @@ class IOStreamController:
         ii_down = Input_I()
         ii_down.ki = KeyBdInput(0, scan_code, KEYEVENTF_SCANCODE, 0, ctypes.pointer(extra))
         x_down = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_down)
-        ctypes.windll.user32.SendInput(1, ctypes.pointer(x_down), ctypes.sizeof(x_down))
+        ctypes.windll.user32.SendInput(1, ctypes.pointer(x_down), sizeof(x_down))
         
         time.sleep(hold_duration + random.uniform(-0.003, 0.005))
         
         ii_up = Input_I()
         ii_up.ki = KeyBdInput(0, scan_code, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
         x_up = Input(ctypes.c_ulong(INPUT_KEYBOARD), ii_up)
-        ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), ctypes.sizeof(x_up))
+        ctypes.windll.user32.SendInput(1, ctypes.pointer(x_up), sizeof(x_up))
 
     def dispatch_tap(self, scan_code):
         self.transmit_key_hold(scan_code, random.uniform(0.121, 0.174))
@@ -169,12 +169,8 @@ class OperationalDataPipeline:
             int(900 * self.scale_factor_y)
         )
         
-        # ------------------------------------------------------------------
-        # FALLBACK ENGINE: PREVENT COMERROR & BOOST FRAMERATE ALLOCATION
-        # ------------------------------------------------------------------
         self.dx_capture_session = None
         try:
-            # Mengalokasikan 8 sirkular RAM buffer tingkat hardware untuk mengunci kecepatan tinggi
             self.dx_capture_session = dxcam.create(output_color="BGR", max_buffer_len=8)
         except Exception as primary_gpu_fault:
             if self.output_to_console:
@@ -182,7 +178,6 @@ class OperationalDataPipeline:
             try:
                 if hasattr(dxcam, "Instance") and dxcam.Instance is not None:
                     dxcam.Instance = None
-                # Membuka paksa koneksi sekunder murni desktop indexing
                 self.dx_capture_session = dxcam.create(device_idx=0, output_idx=0, output_color="BGR")
             except Exception as fatal_exception:
                 print(f"\n[🚨] MULTI-DEVICE HANDSHAKE CRITICAL LOSS: {fatal_exception}")
@@ -197,6 +192,11 @@ class OperationalDataPipeline:
         self.upper_tier_g = np.array([50, 255, 255])
         self.lower_tier_w = np.array([0, 0, 160])
         self.upper_tier_w = np.array([179, 50, 255])
+        
+        # --- IDE BARU: RANGE DETEKSI HSV TOMBOL COLLECT PUTIH (0, 0, 100) ---
+        # S: 0-40, V: 160-255 ditambahkan sebagai toleransi render transparan di dalam game
+        self.lower_collect_white = np.array([0, 0, 160])
+        self.upper_collect_white = np.array([180, 40, 255])
         
         self.current_node_state = "NODE_0_IDLE"
         self.verbosity_log_active = True 
@@ -217,7 +217,6 @@ class OperationalDataPipeline:
         self.purge_pipeline_buffers()
 
     def initialize_configuration_profile(self):
-        # Memaksa isolasi Nuitka mengunci Working Directory fisik murni (os.getcwd)
         application_path = os.getcwd()
         config_path = os.path.join(application_path, 'config.ini')
         parser = configparser.ConfigParser()
@@ -311,46 +310,82 @@ class OperationalDataPipeline:
         time.sleep(1.0)
         self.dx_capture_session.stop()
         sys.exit(0)
-        
+
+    # ==========================================================================
+    # IMPLEMENTASI IDE BARU: OPENCV SMART COLLECTOR ENGINE V5.0
+    # ==========================================================================
     def dispatch_payload_collection(self):
-
-        time.sleep(0.8 + random.uniform(0.01, 0.03)) 
-        system_actual_width = ctypes.windll.user32.GetSystemMetrics(0)  # SM_CXSCREEN
-        system_actual_height = ctypes.windll.user32.GetSystemMetrics(1) # SM_CYSCREEN
-        
-        dynamic_ratio_x = system_actual_width / 1920.0
-        dynamic_ratio_y = system_actual_height / 1080.0
-        
-        shared_base_x = random.randint(800, 930)
-        target_abs_x = int(shared_base_x * dynamic_ratio_x)
-
-        base_standard_y = random.randint(915, 945)
-        target_standard_y = int(base_standard_y * dynamic_ratio_y)
-        
         if self.output_to_console:
-            print(f"\n[*] Display Grid: {system_actual_width}x{system_actual_height}")
-            print(f"[*] Sweeping Area 1 (Standard Button) at Abs (X: {target_abs_x}, Y: {target_standard_y})...")
-             
-        self.handler.smooth_pointer_interpolation(target_abs_x, target_standard_y, steps=20, base_duration=0.20)
-        time.sleep(random.uniform(0.10, 0.14)) 
-        self.handler.execute_single_signal() # Klik Gelombang 1
-
-
-        time.sleep(random.uniform(0.15, 0.20)) 
-        
-        base_extended_y = random.randint(980, 1010) # Target area Y 1000px baru hasil temuan Anda
-        target_extended_y = int(base_extended_y * dynamic_ratio_y)
-        
-        if self.output_to_console:
-            print(f"[*] Sweeping Area 2 (Extended Lower Button) at Abs (X: {target_abs_x}, Y: {target_extended_y})...")
+            print("\n[🔍] Fase 3 Sukses. Memulai Pemindaian Spesifik Tombol Collect (Anti-Release Gate)...")
             
-        # Meluncurkan kursor turun ke bawah secara vertikal murni dengan sangat cepat (steps diperkecil)
-        self.handler.smooth_pointer_interpolation(target_abs_x, target_extended_y, steps=10, base_duration=0.08)
-        time.sleep(random.uniform(0.08, 0.12)) 
-        self.handler.execute_single_signal() # Klik Gelombang 2
+        # Batasi jendela waktu pemindaian maksimal 3.5 detik demi keselamatan task loop
+        start_scan_window = time.time()
+        button_clicked = False
         
-        if self.output_to_console:
-            print("[✅] Dual-Gate Payload Sweep Completed.")
+        while time.time() - start_scan_window < 3.5:
+            # Sediakan panic button 'X' untuk memotong loop jika terjadi anomali game
+            if self.handler.verify_hardware_state(0x58): return
+            
+            collect_frame = self.dx_capture_session.get_latest_frame()
+            if collect_frame is None:
+                time.sleep(0.005)
+                continue
+                
+            # Konversi matriks gambar ke HSV untuk ekstraksi warna putih murni (0, 0, 160 s.d 180, 40, 255)
+            hsv_canvas = cv2.cvtColor(collect_frame, cv2.COLOR_BGR2HSV)
+            collect_mask = cv2.inRange(hsv_canvas, self.lower_collect_white, self.upper_collect_white)
+            
+            # Cari seluruh objek kontur putih yang aktif di dalam layar
+            contours, _ = cv2.findContours(collect_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            for c in contours:
+                area = cv2.contourArea(c)
+                # Filter luas objek: Menyaring noise partikel kecil di background transparan
+                if 100 < area < 3500:
+                    x_loc, y_loc, w_dim, h_dim = cv2.boundingRect(c)
+                    
+                    # Proyeksi Koordinat Lokal DXCam ke Koordinat Absolut Monitor Global Windows
+                    abs_x = self.capture_bounds[0] + x_loc + (w_dim // 2)
+                    abs_y = self.capture_bounds[1] + y_loc + (h_dim // 2)
+                    
+                    # ------------------------------------------------------------------
+                    # ⚡ GATE FILTER: PEMBATASAN ROI ADAPTIF MULTI-RESOLUSI ⚡
+                    # ------------------------------------------------------------------
+                    # Mengunci rentang koordinat absolut (X: 800-930, Y: 930-1010) 
+                    # yang dikalikan skala dinamis agar tetap presisi di layar 1440p
+                    min_allowed_x = int(800 * self.scale_factor_x)
+                    max_allowed_x = int(930 * self.scale_factor_x)
+                    min_allowed_y = int(930 * self.scale_factor_y)
+                    max_allowed_y = int(1010 * self.scale_factor_y)
+                    
+                    # Jika koordinat kontur berada di luar gerbang ROI tombol Collect, BUANG INSTAN!
+                    if not (min_allowed_x <= abs_x <= max_allowed_x) or not (min_allowed_y <= abs_y <= max_allowed_y):
+                        continue # Melompat ke kontur berikutnya (Mengabaikan tombol Release)
+                    
+                    # JIKA LOLOS FILTER: Maka ini adalah 100% target tombol Collect asli!
+                    if self.output_to_console:
+                        print(f"[🎯] TARGET COLLECT COGNIZED -> Abs(X: {abs_x}, Y: {abs_y}) | Extent: {area:.0f}px")
+                    
+                    # Jeda asinkron fuzzed meniru waktu reaksi mata manusia membaca UI baru
+                    time.sleep(random.uniform(0.15, 0.23))
+                    
+                    # Interpolasi kursor meluncur mulus via S-Curve Gaussian resmi
+                    self.handler.smooth_pointer_interpolation(abs_x, abs_y, steps=18, base_duration=0.18)
+                    
+                    # Klik tunggal presisi penutup siklus minigame
+                    time.sleep(random.uniform(0.09, 0.13))
+                    self.handler.execute_single_signal()
+                    
+                    button_clicked = True
+                    break
+            
+            if button_clicked:
+                break
+            time.sleep(0.02) # Mengistirahatkan core CPU thread dari scan berlebih
+            
+            
+        if not button_clicked and self.output_to_console:
+            print("\n[⚠️] Jendela waktu scan habis. Tombol tidak ditemukan di area target.")
 
     def execute_maintenance_sequence(self):
         self.handler.transmit_key_hold(0x20, 1.0)
@@ -444,7 +479,6 @@ class OperationalDataPipeline:
                         time.sleep(0.5) 
                         continue 
 
-                # Memastikan tombol '3' dieksekusi instan di atas perulangan
                 if self.current_node_state == "NODE_0_IDLE":
                     process_text = "Awaiting inject activation trigger '3'..."
                     if self.handler.verify_hardware_state(0x33): # Key '3'
@@ -680,6 +714,8 @@ class OperationalDataPipeline:
                                 
                                 if self.peak_buffer_w_h >= self.VAL_THRESHOLD: 
                                     print(f"    CYCLE STATUS: VALIDATED SUCCESS\n")
+                                    
+                                    # EKSEKUSI PENUH OPENCV SMART SCAN UNTUK TOMBOL COLLECT
                                     self.dispatch_payload_collection() 
                                     
                                     if self.routine_switch_active and (time.time() - self.last_routine_execution_timestamp) >= (self.routine_delay_interval * 60):
