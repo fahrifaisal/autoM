@@ -206,7 +206,6 @@ class KernelTaskScheduler:
         if self.smart_sleep(0.10): return
         
         self.ctrl.interpolate_vector_stream(948, 337, steps=65, base_duration=0.24)
-        self.ctrl.interpolate_vector_stream(948, 336, steps=4, base_duration=0.04)
         
         start_scroll_b1 = time.time()
         for _ in range(18):
@@ -214,7 +213,7 @@ class KernelTaskScheduler:
             time.sleep(0.04 + random.uniform(-0.003, 0.002)) 
             
         elapsed_scroll_b1 = time.time() - start_scroll_b1
-        remaining_hold_b1 = max(0.01, 4.8 - 0.35 - elapsed_scroll_b1)
+        remaining_hold_b1 = max(0.01, 5.4 - 0.35 - elapsed_scroll_b1)
         if self.smart_sleep(remaining_hold_b1): return
         
         self.ctrl.mouse_up() 
@@ -229,7 +228,6 @@ class KernelTaskScheduler:
         if self.smart_sleep(0.10): return
         
         self.ctrl.interpolate_vector_stream(953, 322, steps=65, base_duration=0.24)
-        self.ctrl.interpolate_vector_stream(953, 320, steps=4, base_duration=0.04)
         
         start_scroll_b2 = time.time()
         for _ in range(18):
@@ -237,7 +235,7 @@ class KernelTaskScheduler:
             time.sleep(0.04 + random.uniform(-0.003, 0.002))
             
         elapsed_scroll_b2 = time.time() - start_scroll_b2
-        remaining_hold_b2 = max(0.01, 4.8 - 0.35 - elapsed_scroll_b2)
+        remaining_hold_b2 = max(0.01, 5.4 - 0.35 - elapsed_scroll_b2)
         if self.smart_sleep(remaining_hold_b2): return
         
         self.ctrl.mouse_up() 
@@ -254,18 +252,18 @@ class KernelTaskScheduler:
         self.ctrl.interpolate_vector_stream(970, 341, steps=35, base_duration=0.45) 
         if self.smart_sleep(0.15): return
         self.ctrl.mouse_up() 
-        if self.smart_sleep(0.56 + random.uniform(-0.02, 0.02)): return
+        if self.smart_sleep(0.66 + random.uniform(-0.02, 0.02)): return
         
         # ----------------------------------------------------------------------
         # STEP 5: FINALISASI
         # ----------------------------------------------------------------------
         print("    -> [FINAL] Executing synthesis link verification...")
-        self.ctrl.interpolate_vector_stream(856, 578, steps=12, base_duration=0.10)
+        self.ctrl.interpolate_vector_stream(856, 578, steps=16, base_duration=0.10)
         self.ctrl.click_instant(hold_time=0.166)
         if self.smart_sleep(3.00 + random.uniform(0.02, 0.08)): return
 
         print("    -> [SUCCESS] Verification accepted. Committing persistent logs.")
-        self.ctrl.interpolate_vector_stream(666, 222, steps=12, base_duration=0.10)
+        self.ctrl.interpolate_vector_stream(666, 222, steps=26, base_duration=0.10)
         self.ctrl.click_instant(hold_time=0.152)
         
         self.loop_counter += 1
