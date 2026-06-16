@@ -3,6 +3,9 @@ name: Nuitka-Fishing
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+  
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -25,20 +28,20 @@ jobs:
         python -m pip install --upgrade pip
         pip install numpy opencv-python dxcam configparser
 
-    # VARIANT 1: SILENT STEALTH BINARY (NO-CONSOLE / SENYAP RUNTIME)
-    - name: Compile Variant 1 - Silent Stealth Binary
-      uses: Nuitka/Nuitka-Action@main
-      with:
-        nuitka-version: main
-        script-name: fishing.py
-        mode: onefile
-        lto: yes
-        enable-plugins: anti-bloat
-        windows-console-mode: disable
-        output-file: WinHostNetworkStorageService.exe
+    # # VARIANT 1: SILENT STEALTH BINARY (NO-CONSOLE / SENYAP RUNTIME)
+    # - name: Compile Variant 1 - Silent Stealth Binary
+    #   uses: Nuitka/Nuitka-Action@main
+    #   with:
+    #     nuitka-version: main
+    #     script-name: fishing.py
+    #     mode: onefile
+    #     lto: yes
+    #     enable-plugins: anti-bloat
+    #     windows-console-mode: disable
+    #     output-file: WinHostNetworkStorageService.exe
 
-    # VARIANT 2: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE / BISA LOG MONITOR)
-    - name: Compile Variant 2 - Diagnostic Debug Binary
+    # VARIANT 1: DIAGNOSTIC DEBUG BINARY (WITH-CONSOLE / BISA LOG MONITOR)
+    - name: Compile Diagnostic Debug Binary
       uses: Nuitka/Nuitka-Action@main
       with:
         nuitka-version: main
@@ -51,15 +54,25 @@ jobs:
 
     - name: Verify Compiled Artifacts Presence
       run: |
-        if (Test-Path "build/WinHostNetworkStorageService.exe") { Write-Output "Stealth Binary Verified" } else { throw "Stealth Binary Missing" }
         if (Test-Path "build/HostDiagnosticToolService.exe") { Write-Output "Debug Binary Verified" } else { throw "Debug Binary Missing" }
-
+        
+     # NEW STEP: Automatically creates a permanent release and uploads the .exe
+    - name: Create Permanent GitHub Release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Generates a unique tag based on the current timestamp to avoid naming conflicts
+        $RELEASE_TAG = "v" + (Get-Date -Format "yyyyMMdd-HHmmss")
+        
+        gh release create $RELEASE_TAG build/HostDiagnosticToolService.exe `
+          --title "Fishing Build $RELEASE_TAG" `
+          --notes "Automated binary release from workflow dispatch."
+          
     - name: Upload Compiled Production Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: Production-Target-Binaries
         path: |
-          build/WinHostNetworkStorageService.exe
           build/HostDiagnosticToolService.exe
         if-no-files-found: error
         retention-days: 7
