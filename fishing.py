@@ -321,23 +321,19 @@ class OperationalDataPipeline:
         self.dx_capture_session.stop()
         sys.exit(0)
         
-def dispatch_payload_collection(self):
+    def dispatch_payload_collection(self):
         if self.output_to_console:
             print("\n[🔍] Fase 3 Sukses. Memulai Pemindaian Blok Karakter Teks 'Keep'...")
             
         start_scan_window = time.time()
         button_clicked = False
         
-        # ----------------------------------------------------------------------
-        # ⚡ OPTIMASI DYNAMIC TIMING: Jendela tunggu scan diperluas ke 7.0 detik
-        # Kebal terhadap FPS spiking client (mengimbongkar UI lag 0.2 - 0.7 detik)
-        # ----------------------------------------------------------------------
         while time.time() - start_scan_window < 7.0: 
             if self.handler.verify_hardware_state(0x58): return
             
             collect_frame = self.dx_capture_session.get_latest_frame()
             if collect_frame is None:
-                time.sleep(0.002) # Efisiensi siklus clock thread
+                time.sleep(0.002)
                 continue
                 
             hsv_canvas = cv2.cvtColor(collect_frame, cv2.COLOR_BGR2HSV)
@@ -347,26 +343,18 @@ def dispatch_payload_collection(self):
             for c in contours:
                 area = cv2.contourArea(c)
 
-                # Filter indeks luas diperketat dari hasil data log riil Anda (20 s.d 100px)
                 if 20 < area < 100:
                     x_loc, y_loc, w_dim, h_dim = cv2.boundingRect(c)
                     
-                    # 1. Menentukan Titik Tengah Geometri Asli Huruf "Keep"
                     mid_x = self.capture_bounds[0] + x_loc + (w_dim // 2)
                     mid_y = self.capture_bounds[1] + y_loc + (h_dim // 2)
                     
-                    # --- GEOMETRIC SECURITY ROI GATE (ANTI-RELEASE LOGIC) ---
                     min_allowed_x = int(800 * self.scale_factor_x)
                     max_allowed_x = int(930 * self.scale_factor_x)
                     min_allowed_y = int(930 * self.scale_factor_y)
                     max_allowed_y = int(1010 * self.scale_factor_y)
                     
-                    # Verifikasi apakah koordinat tengah murni masuk ke dalam batas kotak tombol
                     if (min_allowed_x <= mid_x <= max_allowed_x) and (min_allowed_y <= mid_y <= max_allowed_y):
-                        
-                        # --------------------------------------------------------------
-                        # ⚡ IMPLEMENTASI IDE BARU: SPATIAL CLICK JITTER MATRIX ⚡
-                        # --------------------------------------------------------------
                         offset_x = random.randint(int(-40 * self.scale_factor_x), int(40 * self.scale_factor_x))
                         offset_y = random.randint(int(-8 * self.scale_factor_y), int(8 * self.scale_factor_y))
                         
@@ -376,19 +364,18 @@ def dispatch_payload_collection(self):
                         if self.output_to_console:
                             print(f"[🎯] TARGET 'KEEP' SECURED -> Center(X: {mid_x}, Y: {mid_y}) | Fuzzed Target(X: {abs_x}, Y: {abs_y}) | Area: {area:.0f}px")
                         
-                        # Jeda ketukan natural meniru waktu reaksi mata manusia
                         time.sleep(random.uniform(0.15, 0.25))
                         self.handler.smooth_pointer_interpolation(abs_x, abs_y, steps=18, base_duration=0.18)
                         
                         time.sleep(random.uniform(0.08, 0.12))
-                        self.handler.execute_single_signal() # KLIK KIRI DI AREA TERACAK AMAN
+                        self.handler.execute_single_signal()
                         
                         button_clicked = True
                         break
             
             if button_clicked:
                 break
-            time.sleep(0.01) # Akselerasi interupsi loop biner
+            time.sleep(0.01)
             
         if not button_clicked and self.output_to_console:
             print("\n[⚠️] Jendela waktu scan habis. Karakter teks 'Keep' tidak terwujud di dalam gerbang ROI.")
