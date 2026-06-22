@@ -10,7 +10,7 @@ private:
     RECT bounding_roi;
 
 public:
-    DXGICaptureEngine(int width, int height) : screen_w(width), height(height) {
+    DXGICaptureEngine(int width, int height) : screen_w(width), screen_h(height) {
         // Kalkulasi wilayah isolasi kotak pancing (ROI) berbasis rasio resolusi monitor target
         double scale_multiplier_x = screen_w / 1920.0;
         double scale_multiplier_y = screen_h / 1080.0;
