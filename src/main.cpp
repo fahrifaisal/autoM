@@ -38,7 +38,7 @@ void refresh_cli_interface(BotState state, std::string log_details, int successe
     std::cout << OBS(" [HOTKEYS KONTROL SYSTEM]:\n");
     std::cout << OBS("   * [E] (In-Game) -> Trigger Start Automation Sequence\n");
     std::cout << OBS("   * [X] Key       -> Emergency Interrupt Force Rollback to STANDBY\n");
-    std::cout << OBS("   * [0] Key       -> Terminate Allocation Thread & Exit Safely\n";)
+    std::cout << OBS("   * [0] Key       -> Terminate Allocation Thread & Exit Safely\n");
     std::cout << OBS("==================================================\n");
 }
 
