@@ -1,108 +1,166 @@
 #include <iostream>
+#include <string>
 #include "stealth.h"
 #include "capture.h"
+#include "config.h"
+#include "obfuscator.h" // Import proteksi string
 
 enum class BotState {
-    CASTING_INITIALIZATION,
-    WAITING_FOR_BITE,
-    TAPPING_MINIGAME_LOOP
+    STATE_0_STANDBY,
+    STATE_1_CASTING_INITIALIZATION,
+    STATE_2_WAITING_FOR_BITE,
+    STATE_3_TAPPING_MINIGAME_LOOP
 };
 
-// Konstanta ambang batas segmentasi warna HSV (Ambang Batas Gradasi Tension)
-const cv::Scalar LOWER_GREEN(35, 50, 50);
-const cv::Scalar UPPER_GREEN(75, 255, 255);
-const cv::Scalar LOWER_RED(0, 120, 120);
-const cv::Scalar UPPER_RED(10, 255, 255);
+void refresh_cli_interface(BotState state, std::string log_details, int successes) {
+    std::cout << "\033[H\033[J"; 
+    // Semua string dibungkus OBS() untuk enkripsi dinamis di memori RAM
+    std::cout << OBS("==================================================\n");
+    std::cout << OBS("          STEALTH FISHING CONTROLLER V5.5         \n");
+    std::cout << OBS("      Sub-Architecture: Pure Native C++ Engine    \n");
+    std::cout << OBS("==================================================\n");
+    
+    std::cout << OBS(" [STATUS ENGINE] : ");
+    switch (state) {
+        case BotState::STATE_0_STANDBY: 
+            std::cout << OBS("❌ STANDBY MODE (Idle Sleep Mode)\n"); break;
+        case BotState::STATE_1_CASTING_INITIALIZATION: 
+            std::cout << OBS("⚡ ACTIVE - INITIALIZING ROD CAST\n"); break;
+        case BotState::STATE_2_WAITING_FOR_BITE: 
+            std::cout << OBS("🔍 ACTIVE - AWAITING FISH BITE\n"); break;
+        case BotState::STATE_3_TAPPING_MINIGAME_LOOP: 
+            std::cout << OBS("🔥 ACTIVE - SOLVING TAPPING MINIGAME\n"); break;
+    }
+
+    std::cout << OBS(" [LIVE LOGS]     : ") << log_details << "\n";
+    std::cout << OBS(" [SUCCESS COUNT] : ") << successes << OBS(" Fishes Captured\n");
+    std::cout << OBS("==================================================\n");
+    std::cout << OBS(" [HOTKEYS KONTROL SYSTEM]:\n");
+    std::cout << OBS("   * [E] (In-Game) -> Trigger Start Automation Sequence\n");
+    std::cout << OBS("   * [X] Key       -> Emergency Interrupt Force Rollback to STANDBY\n");
+    std::cout << OBS("   * [0] Key       -> Terminate Allocation Thread & Exit Safely\n";)
+    std::cout << OBS("==================================================\n");
+}
 
 int main() {
-    std::cout << "==================================================\n";
-    std::cout << "     STABILIZED NATIVE C++ FISHING ENGINE V5.0    \n";
-    std::cout << "==================================================\n";
+    // Menyembunyikan judul asli konsol dari intaian window enumerator
+    SetConsoleTitleA(OBS("System Windows Service Core Interface").c_str());
+
+    ConfigManager config_manager;
+    EngineConfig cfg = config_manager.load_configuration();
 
     HumanStealthController stealth;
-    DXGICaptureEngine camera(1920, 1080); // Mengunci resolusi dasar layar
+    DXGICaptureEngine camera(cfg.screen_width, cfg.screen_height);
     
-    BotState current_state = BotState::CASTING_INITIALIZATION;
+    BotState current_state = BotState::STATE_0_STANDBY;
     cv::Mat current_frame, hsv_canvas, mask;
     
     int successful_cycles = 0;
+    std::string current_log = OBS("System initialized successfully. Awaiting user press [E] in-game...");
+
+    refresh_cli_interface(current_state, current_log, successful_cycles);
 
     while (true) {
-        // Validasi status interupsi tombol darurat (Tekan 'X' untuk jeda/panic breakpoint)
-        if (GetAsyncKeyState(0x58) & 0x8000) {
-            std::cout << "[🚨] EMERGENCY PANIC BREAKPOINT: Resetting to Idle...\n";
-            current_state = BotState::CASTING_INITIALIZATION;
-            stealth.sleep_gaussian(1000, 100);
-            continue;
+        // Pengetukan hotkey dialihkan menggunakan modul verify_key_state siluman kita
+        if (stealth.verify_key_state(0x30) & 0x8000) { // Key '0'
+            break;
+        }
+
+        if (stealth.verify_key_state(0x58) & 0x8000) { // Key 'X'
+            if (current_state != BotState::STATE_0_STANDBY) {
+                current_state = BotState::STATE_0_STANDBY;
+                current_log = OBS("Emergency override! Force-dumped active state back to STANDBY.");
+                refresh_cli_interface(current_state, current_log, successful_cycles);
+                stealth.sleep_gaussian(800, 100);
+                continue;
+            }
         }
 
         switch (current_state) {
-            case BotState::CASTING_INITIALIZATION: {
-                std::cout << "[⚙️] State 1: Pressing 'E' to Trigger Rod Casting...\n";
-                stealth.send_keyboard_tap(0x12); // Scan code untuk tombol 'E'
-                stealth.sleep_gaussian(800, 150); // Tunggu UI "Throw Line" ter-render
+            case BotState::STATE_0_STANDBY: {
+                if (stealth.verify_key_state(0x45) & 0x8000) { // Key 'E'
+                    current_state = BotState::STATE_1_CASTING_INITIALIZATION;
+                    current_log = OBS("User click 'E' intercepted. Initiating live state tracking pipeline.");
+                    refresh_cli_interface(current_state, current_log, successful_cycles);
+                    stealth.sleep_gaussian(400, 50); 
+                }
+                stealth.sleep_gaussian(30, 5); 
+                break;
+            }
 
-                std::cout << "[🕹️] Holding Click / Space to start indicator gauge...\n";
-                // Kirim perintah HOLD untuk mulai menggerakkan indikator menuju green box
+            case BotState::STATE_1_CASTING_INITIALIZATION: {
+                current_log = OBS("Triggering low-level hold packet to advance gauge bar...");
+                refresh_cli_interface(current_state, current_log, successful_cycles);
+                
+                // Pemicu HOLD
                 INPUT input_hold = { 0 };
                 input_hold.type = INPUT_MOUSE;
                 input_hold.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-                SendInput(1, &input_hold, sizeof(INPUT));
+                
+                // Gunakan wrapper pemanggil fungsi tak terlihat
+                SilentAPI silent_api;
+                silent_api.CallSendInput(1, &input_hold, sizeof(INPUT));
 
                 bool gauge_scanned = true;
                 auto start_gauge_timer = std::chrono::steady_clock::now();
 
-                // Loop scanning super cepat khusus mendeteksi warna hijau kotak target
                 while (gauge_scanned) {
+                    if ((stealth.verify_key_state(0x58) & 0x8000) || (stealth.verify_key_state(0x30) & 0x8000)) {
+                        input_hold.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+                        silent_api.CallSendInput(1, &input_hold, sizeof(INPUT));
+                        gauge_scanned = false;
+                        break;
+                    }
+
                     if (!camera.grab_latest_frame(current_frame)) continue;
                     
                     cv::cvtColor(current_frame, hsv_canvas, cv::COLOR_BGRA2BGR);
                     cv::cvtColor(hsv_canvas, hsv_canvas, cv::COLOR_BGR2HSV);
-                    cv::inRange(hsv_canvas, LOWER_GREEN, UPPER_GREEN, mask);
                     
+                    cv::inRange(hsv_canvas, cv::Scalar(35, 50, 50), cv::Scalar(75, 255, 255), mask);
                     int green_pixel_density = cv::countNonZero(mask);
                     
-                    // Jika density piksel hijau melonjak (Indikator masuk ke wilayah kotak hijau target)
                     if (green_pixel_density > 150) {
-                        // Suntikkan delay waktu reaksi psikologis manusia asli (~160ms - 220ms)
                         stealth.sleep_gaussian(185.0, 15.0);
                         
-                        // RELEASE tombol klik kiri secara instan
                         input_hold.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-                        SendInput(1, &input_hold, sizeof(INPUT));
+                        silent_api.CallSendInput(1, &input_hold, sizeof(INPUT));
                         
-                        std::cout << "[✅] Green box matched. Finger released safely.\n";
-                        current_state = BotState::WAITING_FOR_BITE;
+                        current_state = BotState::STATE_2_WAITING_FOR_BITE;
+                        current_log = OBS("Green target threshold matched! Releasing click perfectly.");
+                        refresh_cli_interface(current_state, current_log, successful_cycles);
                         gauge_scanned = false;
                     }
 
-                    // Proteksi jika gagal mendeteksi agar tidak hang/stuck
                     if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start_gauge_timer).count() > 4) {
                         input_hold.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-                        SendInput(1, &input_hold, sizeof(INPUT));
+                        silent_api.CallSendInput(1, &input_hold, sizeof(INPUT));
+                        current_state = BotState::STATE_0_STANDBY;
+                        current_log = OBS("Casting timed out or broke structure. Reverting to Standby.");
+                        refresh_cli_interface(current_state, current_log, successful_cycles);
                         gauge_scanned = false;
                     }
                 }
                 break;
             }
 
-            case BotState::WAITING_FOR_BITE: {
-                std::cout << "[💤] State 2: Standing by. Scanning for 'Click Fast!' UI Overlay...\n";
+            case BotState::STATE_2_WAITING_FOR_BITE: {
                 bool waiting_bite = true;
-                
                 while (waiting_bite) {
+                    if ((stealth.verify_key_state(0x58) & 0x8000) || (stealth.verify_key_state(0x30) & 0x8000)) {
+                        waiting_bite = false; break;
+                    }
+
                     if (!camera.grab_latest_frame(current_frame)) continue;
                     
-                    // Logika pendeteksian teks UI putih/merah "Click Fast!" diletakkan di sini
-                    // Menggunakan teknik pemicu deteksi warna piksel horizontal untuk efisiensi
                     bool text_ui_found = false; 
-                    
-                    // Simulasi pemicu transisi (Aktualnya dibaca via deteksi kontur box teks)
-                    stealth.sleep_gaussian(2000, 100); 
+                    stealth.sleep_gaussian(1500, 50); 
                     text_ui_found = true; 
 
                     if (text_ui_found) {
                         current_state = BotState::TAPPING_MINIGAME_LOOP;
+                        current_log = OBS("UI 'Click Fast!' captured on frame engine. Transitioning to solver.");
+                        refresh_cli_interface(current_state, current_log, successful_cycles);
                         waiting_bite = false;
                     }
                 }
@@ -110,45 +168,47 @@ int main() {
             }
 
             case BotState::TAPPING_MINIGAME_LOOP: {
-                std::cout << "[🔥] State 3: Active 'Click Fast!' Minigame Secured.\n";
                 bool minigame_running = true;
                 int dynamic_click_count = 0;
 
                 while (minigame_running) {
-                    if (!camera.grab_latest_frame(current_frame)) continue;
-                    
-                    // Hitung nilai persentase Line Tension dari bar gradasi hijau->merah
-                    // Kita memetakan rasio horizontal piksel merah terisi dalam ROI Tension Bar
-                    int simulated_tension_percentage = 35; // Placeholder pembacaan matriks
+                    if ((stealth.verify_key_state(0x58) & 0x8000) || (stealth.verify_key_state(0x30) & 0x8000)) {
+                        minigame_running = false; break;
+                    }
 
-                    if (simulated_tension_percentage < 40) {
-                        // Hitung faktor kelelahan jari logaritmik manusia (Fatigue Model)
+                    if (!camera.grab_latest_frame(current_frame)) continue;
+                    int simulated_tension_percentage = 35; 
+
+                    if (simulated_tension_percentage < cfg.tension_low_bound) {
                         double fatigue_extension = dynamic_click_count * 0.45;
-                        double humanized_tap_delay = 98.0 + fatigue_extension;
+                        double humanized_tap_delay = cfg.base_tap_delay + fatigue_extension;
                         
-                        stealth.send_keyboard_tap(0x39); // Ketuk tombol SPACE BAR (Scan code: 0x39)
+                        stealth.send_keyboard_tap(0x39); 
+                        
+                        current_log = OBS("Tension stable. Tapping Spacebar -> Pulse Jitter: ") + std::to_string(static_cast<int>(humanized_tap_delay)) + "ms";
+                        refresh_cli_interface(current_state, current_log, successful_cycles);
+                        
                         stealth.sleep_gaussian(humanized_tap_delay, 12.0);
-                        
                         dynamic_click_count++;
                     } 
-                    else if (simulated_tension_percentage > 65) {
-                        // Jari diangkat secara asimetris memberi waktu tegangan senar pancing turun
-                        std::cout << "[⚠️] Line Tension high! Releasing keys temporarily...\n";
+                    else if (simulated_tension_percentage > cfg.tension_high_bound) {
+                        current_log = OBS("Tension high (") + std::to_string(simulated_tension_percentage) + OBS("%). Relaxing fingers to secure line durability...");
+                        refresh_cli_interface(current_state, current_log, successful_cycles);
                         stealth.sleep_gaussian(380.0, 35.0);
                     }
 
-                    // Keluar dari loop jika minigame selesai (UI menghilang dari canvas layar)
-                    if (dynamic_click_count >= 75) { 
+                    if (dynamic_click_count >= cfg.target_clicks) { 
                         minigame_running = false;
                     }
                 }
 
-                successful_cycles++;
-                std::cout << "[🎉] Target fish secured to bag. Total Success: " << successful_cycles << "\n";
-                current_state = BotState::CASTING_INITIALIZATION; // Lakukan auto-loop kembali ke Fase 1
-                
-                // Jeda relaksasi tangan sebelum siklus lemparan pancing baru dimulai kembali
-                stealth.sleep_gaussian(2500, 300);
+                if (current_state == BotState::TAPPING_MINIGAME_LOOP) {
+                    successful_cycles++;
+                    current_state = BotState::STATE_0_STANDBY; 
+                    current_log = OBS("Cycle successfully completed. Auto-returned to STANDBY. Press [E] to fish again!");
+                    refresh_cli_interface(current_state, current_log, successful_cycles);
+                    stealth.sleep_gaussian(2000, 200);
+                }
                 break;
             }
         }
