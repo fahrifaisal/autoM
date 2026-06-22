@@ -1,0 +1,54 @@
+name: Native C++ Stealth Build Pipeline
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/cpp-stealth-build.yml'
+  workflow_dispatch: # Bisa di-run manual dari tab Actions GitHub
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: 1. Checkout Source Code
+      uses: actions/checkout@v4
+
+    - name: 2. Setup MSVC Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: 3. Setup vcpkg Package Manager
+      uses: johnwason/vcpkg-action@v6
+      with:
+        pkgs: opencv4
+        triplet: x64-windows-static
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 4. Configure CMake Architecture
+      run: |
+        cmake -B build -S . `
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+          -DCMAKE_BUILD_TYPE=Release
+
+    - name: 5. Execute Hardware-Level Native Compilation
+      run: |
+        cmake --build build --config Release
+
+    - name: 6. Inject Random Junk Byte (Polymorphic Hash)
+      shell: powershell
+      run: |
+        $exePath = "build/Release/FishingEngine.exe"
+        if (Test-Path $exePath) {
+            $junk = [byte[]](1..64 | ForEach-Object { Get-Random -Min 0 -Max 255 })
+            Add-Content -Path $exePath -Value $junk -Encoding Byte
+            Write-Host "[✅] Successfully fuzzed binary signature hash!"
+        }
+
+    - name: 7. Upload Stealth Artifact Binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: Finished_Stealth_Engine_C++
+        path: build/Release/FishingEngine.exe
