@@ -4,6 +4,13 @@ project(FishingStealthEngine LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ==============================================================================
+# ⚡ PERBAIKAN UTAMA: STATIC RUNTIME LINKAGE SELECTION (/MT)
+# ==============================================================================
+# Memaksa MSVC mengemas C/C++ Runtime Library secara statis ke dalam .exe
+# Wajib ada agar klop dengan OpenCV versi x64-windows-static dari vcpkg
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # Optimasi Compiler MSVC untuk performa maksimal dan biner ringkas
 if(MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /Oi /Gy /GL /DNDEBUG")
