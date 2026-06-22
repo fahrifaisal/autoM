@@ -1,50 +1,57 @@
 #pragma once
 #include <windows.h>
 #include <opencv2/opencv.hpp>
+#include "obfuscator.h"
 
 class DXGICaptureEngine {
 private:
-    int width;
-    int height;
-    RECT roi;
+    int screen_w;
+    int screen_h;
+    RECT bounding_roi;
 
 public:
-    DXGICaptureEngine(int screen_w, int screen_h) : width(screen_w), height(screen_h) {
-        // Tentukan batas wilayah ROI pancing secara dinamis berbasis skala resolusi
-        roi.left = static_cast<long>(600 * (width / 1920.0));
-        roi.top = static_cast<long>(250 * (height / 1080.0));
-        roi.right = static_cast<long>(1200 * (width / 1920.0));
-        roi.bottom = static_cast<long>(1050 * (height / 1080.0));
+    DXGICaptureEngine(int width, int height) : screen_w(width), height(height) {
+        // Kalkulasi wilayah isolasi kotak pancing (ROI) berbasis rasio resolusi monitor target
+        double scale_multiplier_x = screen_w / 1920.0;
+        double scale_multiplier_y = screen_h / 1080.0;
+
+        bounding_roi.left = static_cast<long>(600 * scale_multiplier_x);
+        bounding_roi.top = static_cast<long>(250 * scale_multiplier_y);
+        bounding_roi.right = static_cast<long>(1200 * scale_multiplier_x);
+        bounding_roi.bottom = static_cast<long>(1050 * scale_multiplier_y);
     }
 
-    // Fungsi utilitas grabber untuk mengekstrak bitmap layar menjadi Matriks OpenCV cv::Mat
     bool grab_latest_frame(cv::Mat& output_matrix) {
-        // Implementasi Win32 BitBlt / DXGI desktop duplication fall-back interface
+        // Interfasi penangkapan tingkat rendah Windows GDI Engine
         HDC hScreenDC = GetDC(NULL);
         HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
         
-        int roi_w = roi.right - roi.left;
-        int roi_h = roi.bottom - roi.top;
+        int region_width = bounding_roi.right - bounding_roi.left;
+        int region_height = bounding_roi.bottom - bounding_roi.top;
         
-        HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, roi_w, roi_h);
+        HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, region_width, region_height);
         HBITMAP hOldBitmap = (HBITMAP)SelectObject(hMemoryDC, hBitmap);
         
-        // Transfer biner piksel langsung dari hardware konteks device layar
-        BitBlt(hMemoryDC, 0, 0, roi_w, roi_h, hScreenDC, roi.left, roi.top, SRCCOPY);
+        // Transfer bit fisik matriks gambar langsung dari kartu grafis aktif
+        BitBlt(hMemoryDC, 0, 0, region_width, region_height, hScreenDC, bounding_roi.left, bounding_roi.top, SRCCOPY);
         
-        // Konversi Bitmap GDI menjadi Matriks CV_8UC4 (BGRA)
-        output_matrix.create(roi_h, roi_w, CV_8UC4);
-        BITMAPINFOHEADER bi = { 0 };
-        bi.biSize = sizeof(BITMAPINFOHEADER);
-        bi.biWidth = roi_w;
-        bi.biHeight = -roi_h;  // Membalik baris agar matriks terbaca top-down secara natural
-        bi.biPlanes = 1;
-        bi.biBitCount = 32;
-        bi.biCompression = BI_RGB;
+        // Alokasikan dimensi internal matriks OpenCV sebagai penampung data 4-Channel (BGRA)
+        output_matrix.create(region_height, region_width, CV_8UC4);
         
-        GetDIBits(hMemoryDC, hBitmap, 0, roi_h, output_matrix.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+        BITMAPINFOHEADER bmiHeader = { 0 };
+        bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmiHeader.biWidth = region_width;
+        bmiHeader.biHeight = -region_height; // Format negatif memaksa pembacaan top-down koordinat piksel
+        bmiHeader.biPlanes = 1;
+        bmiHeader.biBitCount = 32;
+        bmiHeader.biCompression = BI_RGB;
         
-        // Pembersihan resource memori GDI agar terhindar dari Memory Leak
+        // Salin susunan bit biner memori GDI ke pointer array data mentah OpenCV
+        GetDIBits(hMemoryDC, hBitmap, 0, region_height, output_matrix.data, (BITMAPINFO*)&bmiHeader, DIB_RGB_COLORS);
+        
+        // ==============================================================================
+        // CRITICAL CLEANUP: DE-ALOKASI DAN PEMBERSIHAN RESOURCE MEMORI DEVICE CONTEXT
+        // ==============================================================================
         SelectObject(hMemoryDC, hOldBitmap);
         DeleteObject(hBitmap);
         DeleteDC(hMemoryDC);
