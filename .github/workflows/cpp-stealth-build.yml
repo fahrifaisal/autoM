@@ -1,11 +1,6 @@
 name: Native C++ Stealth Build Pipeline
 
 on:
-  push:
-    paths:
-      - 'src/**'
-      - 'CMakeLists.txt'
-      - '.github/workflows/cpp-stealth-build.yml'
   workflow_dispatch: # Bisa di-run manual dari tab Actions GitHub
 
 jobs:
