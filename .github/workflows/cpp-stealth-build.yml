@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-windows:
-    runs-runs-on: windows-latest
+    runs-on: windows-latest
 
     steps:
     - name: 1. Checkout Source Code
