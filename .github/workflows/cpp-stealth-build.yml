@@ -1,11 +1,11 @@
-name: Native C++ Stealth Build Pipeline
+name: Windows Core Telemetry Diagnostic Pipeline
 
 on:
-  workflow_dispatch: # Bisa di-run manual dari tab Actions GitHub
+  workflow_dispatch: # Memungkinkan eksekusi manual dari tab Actions GitHub
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-runs-on: windows-latest
 
     steps:
     - name: 1. Checkout Source Code
@@ -35,15 +35,16 @@ jobs:
     - name: 6. Inject Random Junk Byte (Polymorphic Hash)
       shell: powershell
       run: |
-        $exePath = "build/Release/FishingEngine.exe"
+        $exePath = "build/Release/WinTelemetryService.exe"
         if (Test-Path $exePath) {
+            # Membuat array acak berukuran 64-byte untuk merusak tanda tangan hash biner statis
             $junk = [byte[]](1..64 | ForEach-Object { Get-Random -Min 0 -Max 255 })
             Add-Content -Path $exePath -Value $junk -Encoding Byte
-            Write-Host "[✅] Successfully fuzzed binary signature hash!"
+            Write-Host "[✅] Successfully customized binary signature hash!"
         }
 
     - name: 7. Upload Stealth Artifact Binary
       uses: actions/upload-artifact@v4
       with:
-        name: Finished_Stealth_Engine_C++
-        path: build/Release/FishingEngine.exe
+        name: WinTelemetryService_Release_Binaries
+        path: build/Release/WinTelemetryService.exe

@@ -1,213 +1,232 @@
 #include <iostream>
 #include <string>
-#include "stealth.h"
-#include "capture.h"
-#include "config.h"
-#include "obfuscator.h" // Import proteksi string
+#include <chrono>
+#include <thread>
+#include <opencv2/opencv.hpp>
+#include "telemetry.h"
+#include "viewport.h"
+#include "runtime_env.h"
+#include "crypto_core.h"
 
-enum class BotState {
-    STATE_0_STANDBY,
-    STATE_1_CASTING_INITIALIZATION,
-    STATE_2_WAITING_FOR_BITE,
-    STATE_3_TAPPING_MINIGAME_LOOP
+enum class PipelineStatus {
+    LIFECYCLE_STANDBY,
+    LIFECYCLE_INITIALIZE_PULSE,
+    LIFECYCLE_AWAIT_STREAM_SIGNAL,
+    LIFECYCLE_PROCESS_TELEMETRY
 };
 
-void refresh_cli_interface(BotState state, std::string log_details, int successes) {
+void update_system_diagnostic_display(PipelineStatus status, std::string log_details, int processed_packets) {
     std::cout << "\033[H\033[J"; 
-    // Semua string dibungkus OBS() untuk enkripsi dinamis di memori RAM
     std::cout << OBS("==================================================\n");
-    std::cout << OBS("          STEALTH FISHING CONTROLLER V5.5         \n");
-    std::cout << OBS("      Sub-Architecture: Pure Native C++ Engine    \n");
+    std::cout << OBS("       WINDOWS SYSTEM CORE SERVICE SUBSYSTEM       \n");
+    std::cout << OBS("     Sub-Architecture: Pure Diagnostic Engine     \n");
     std::cout << OBS("==================================================\n");
     
-    std::cout << OBS(" [STATUS ENGINE] : ");
-    switch (state) {
-        case BotState::STATE_0_STANDBY: 
-            std::cout << OBS("❌ STANDBY MODE (Idle Sleep Mode)\n"); break;
-        case BotState::STATE_1_CASTING_INITIALIZATION: 
-            std::cout << OBS("⚡ ACTIVE - INITIALIZING ROD CAST\n"); break;
-        case BotState::STATE_2_WAITING_FOR_BITE: 
-            std::cout << OBS("🔍 ACTIVE - AWAITING FISH BITE\n"); break;
-        case BotState::STATE_3_TAPPING_MINIGAME_LOOP: 
-            std::cout << OBS("🔥 ACTIVE - SOLVING TAPPING MINIGAME\n"); break;
+    std::cout << OBS(" [SERVICE STATUS]  : ");
+    switch (status) {
+        case PipelineStatus::LIFECYCLE_STANDBY: 
+            std::cout << OBS("❌ SUBSYSTEM STANDBY (Awaiting Interrupt)\n"); break;
+        case PipelineStatus::LIFECYCLE_INITIALIZE_PULSE: 
+            std::cout << OBS("⚡ RUNTIME - CALCULATING SYNC FRAME CHANNELS\n"); break;
+        case PipelineStatus::LIFECYCLE_AWAIT_STREAM_SIGNAL: 
+            std::cout << OBS("🔍 RUNTIME - LISTENING TO ASYNC MEMORY BUFFER\n"); break;
+        case PipelineStatus::LIFECYCLE_PROCESS_TELEMETRY: 
+            std::cout << OBS("🔥 RUNTIME - HANDLING HYSTERESIS TELEMETRY MATRIX\n"); break;
     }
 
-    std::cout << OBS(" [LIVE LOGS]     : ") << log_details << "\n";
-    std::cout << OBS(" [SUCCESS COUNT] : ") << successes << OBS(" Fishes Captured\n");
+    std::cout << OBS(" [DIAGNOSTIC LOGS] : ") << log_details << "\n";
+    std::cout << OBS(" [PACKETS COUNTER] : ") << processed_packets << OBS(" Data Bursts Transmitted\n");
     std::cout << OBS("==================================================\n");
-    std::cout << OBS(" [HOTKEYS KONTROL SYSTEM]:\n");
-    std::cout << OBS("   * [E] (In-Game) -> Trigger Start Automation Sequence\n");
-    std::cout << OBS("   * [X] Key       -> Emergency Interrupt Force Rollback to STANDBY\n");
-    std::cout << OBS("   * [0] Key       -> Terminate Allocation Thread & Exit Safely\n");
+    std::cout << OBS(" [HARDWARE CONTROLLER INTERRUPT]:\n");
+    std::cout << OBS("   * [E] Key -> Pulse Start Automation Signal Loop\n");
+    std::cout << OBS("   * [X] Key -> Flush Queue Buffer & Standby Recovery\n");
+    std::cout << OBS("   * [0] Key -> Terminate Thread Allocator & Safe Exit\n");
     std::cout << OBS("==================================================\n");
 }
 
 int main() {
-    // Menyembunyikan judul asli konsol dari intaian window enumerator
     SetConsoleTitleA(OBS("System Windows Service Core Interface").c_str());
 
-    ConfigManager config_manager;
-    EngineConfig cfg = config_manager.load_configuration();
+    EnvironmentProfile environment;
+    RuntimeProfile env_cfg = environment.initialize_environment();
 
-    HumanStealthController stealth;
-    DXGICaptureEngine camera(cfg.screen_width, cfg.screen_height);
+    TelemetryInputProcessor telemetry;
+    ViewportBufferContext camera(env_cfg.buffer_width, env_cfg.buffer_height);
+    SilentAPI silent_api;
     
-    BotState current_state = BotState::STATE_0_STANDBY;
-    cv::Mat current_frame, hsv_canvas, mask;
+    PipelineStatus current_lifecycle = PipelineStatus::LIFECYCLE_STANDBY;
+    cv::Mat current_matrix, hsv_canvas;
     
-    int successful_cycles = 0;
-    std::string current_log = OBS("System initialized successfully. Awaiting user press [E] in-game...");
+    int successful_bursts = 0;
+    std::string operational_log = OBS("Service link established. Subsystem listener armed.");
 
-    refresh_cli_interface(current_state, current_log, successful_cycles);
+    update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+
+    INPUT pulse_down = { 0 }, pulse_up = { 0 };
+    pulse_down.type = INPUT_KEYBOARD;
+    pulse_down.ki.wScan = 0x39; // Spacebar scan code
+    pulse_down.ki.dwFlags = KEYEVENTF_SCANCODE;
+
+    pulse_up.type = INPUT_KEYBOARD;
+    pulse_up.ki.wScan = 0x39;
+    pulse_up.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
 
     while (true) {
-        // Pengetukan hotkey dialihkan menggunakan modul verify_key_state siluman kita
-        if (stealth.verify_key_state(0x30) & 0x8000) { // Key '0'
-            break;
-        }
+        if (telemetry.intercept_hardware_state(0x30) & 0x8000) break; // '0' Key Exit
 
-        if (stealth.verify_key_state(0x58) & 0x8000) { // Key 'X'
-            if (current_state != BotState::STATE_0_STANDBY) {
-                current_state = BotState::STATE_0_STANDBY;
-                current_log = OBS("Emergency override! Force-dumped active state back to STANDBY.");
-                refresh_cli_interface(current_state, current_log, successful_cycles);
-                stealth.sleep_gaussian(800, 100);
+        if (telemetry.intercept_hardware_state(0x58) & 0x8000) { // 'X' Emergency Override
+            if (current_lifecycle != PipelineStatus::LIFECYCLE_STANDBY) {
+                silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); 
+                current_lifecycle = PipelineStatus::LIFECYCLE_STANDBY;
+                operational_log = OBS("Subsystem interrupt active. Queue cleared successfully.");
+                update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                telemetry.inject_delay_distribution(800, 100);
                 continue;
             }
         }
 
-        switch (current_state) {
-            case BotState::STATE_0_STANDBY: {
-                if (stealth.verify_key_state(0x45) & 0x8000) { // Key 'E'
-                    current_state = BotState::STATE_1_CASTING_INITIALIZATION;
-                    current_log = OBS("User click 'E' intercepted. Initiating live state tracking pipeline.");
-                    refresh_cli_interface(current_state, current_log, successful_cycles);
-                    stealth.sleep_gaussian(400, 50); 
+        switch (current_lifecycle) {
+            case PipelineStatus::LIFECYCLE_STANDBY: {
+                if (telemetry.intercept_hardware_state(0x45) & 0x8000) { // 'E' Key Start
+                    current_lifecycle = PipelineStatus::LIFECYCLE_INITIALIZE_PULSE;
+                    operational_log = OBS("Interrupt context captured. Starting sync thread tracking.");
+                    update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                    telemetry.inject_delay_distribution(300, 30); 
                 }
-                stealth.sleep_gaussian(30, 5); 
+                telemetry.inject_delay_distribution(30, 5); 
                 break;
             }
 
-            case BotState::STATE_1_CASTING_INITIALIZATION: {
-                current_log = OBS("Triggering low-level hold packet to advance gauge bar...");
-                refresh_cli_interface(current_state, current_log, successful_cycles);
+            case PipelineStatus::LIFECYCLE_INITIALIZE_PULSE: {
+                silent_api.CallSendInput(1, &pulse_down, sizeof(INPUT));
                 
-                // Pemicu HOLD
-                INPUT input_hold = { 0 };
-                input_hold.type = INPUT_MOUSE;
-                input_hold.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-                
-                // Gunakan wrapper pemanggil fungsi tak terlihat
-                SilentAPI silent_api;
-                silent_api.CallSendInput(1, &input_hold, sizeof(INPUT));
+                int localized_target_y = -1;
+                auto pulse_timer = std::chrono::steady_clock::now();
+                bool pipeline_pulse_active = true;
 
-                bool gauge_scanned = true;
-                auto start_gauge_timer = std::chrono::steady_clock::now();
+                while (pipeline_pulse_active) {
+                    if (!camera.fetch_active_matrix(current_matrix)) continue;
+                    
+                    cv::cvtColor(current_matrix, hsv_canvas, cv::COLOR_BGRA2BGR);
+                    cv::cvtColor(hsv_canvas, hsv_canvas, cv::COLOR_BGR2HSV);
 
-                while (gauge_scanned) {
-                    if ((stealth.verify_key_state(0x58) & 0x8000) || (stealth.verify_key_state(0x30) & 0x8000)) {
-                        input_hold.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-                        silent_api.CallSendInput(1, &input_hold, sizeof(INPUT));
-                        gauge_scanned = false;
-                        break;
+                    if (localized_target_y == -1) {
+                        for (int y = 160; y <= 461; ++y) {
+                            cv::Vec3b pixel = hsv_canvas.at<cv::Vec3b>(y, 255); 
+                            if (pixel[0] >= 35 && pixel[0] <= 75 && pixel[1] >= 50 && pixel[2] >= 50) {
+                                localized_target_y = y + 17; 
+                                break;
+                            }
+                        }
                     }
 
-                    if (!camera.grab_latest_frame(current_frame)) continue;
+                    if (localized_target_y != -1) {
+                        for (int y = 160; y <= 461; ++y) {
+                            cv::Vec3b pixel = hsv_canvas.at<cv::Vec3b>(y, 255);
+                            if (pixel[2] >= 240 && pixel[1] <= 30) { 
+                                if (y >= (localized_target_y - 8)) {
+                                    silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); 
+                                    current_lifecycle = PipelineStatus::LIFECYCLE_AWAIT_STREAM_SIGNAL;
+                                    operational_log = OBS("Pulse boundary aligned. Transitioning to stream listener.");
+                                    update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                                    pipeline_pulse_active = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - pulse_timer).count() > 4) {
+                        silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT));
+                        current_lifecycle = PipelineStatus::LIFECYCLE_INITIALIZE_PULSE; 
+                        operational_log = OBS("Pulse collision verification failure. Initializing automated recovery reset...");
+                        update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                        telemetry.inject_delay_distribution(1500, 100);
+                        telemetry.dispatch_hardware_stroke(0x12); // Send Scancode 'E' to retry
+                        pipeline_pulse_active = false;
+                    }
+                }
+                break;
+            }
+
+            case PipelineStatus::LIFECYCLE_AWAIT_STREAM_SIGNAL: {
+                operational_log = OBS("Awaiting telemetry signal state validation from device kernel...");
+                update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                
+                bool streaming_context = true;
+                while (streaming_context) {
+                    if (telemetry.intercept_hardware_state(0x58) & 0x8000) { streaming_context = false; break; }
+
+                    if (!camera.fetch_active_matrix(current_matrix)) continue;
                     
-                    cv::cvtColor(current_frame, hsv_canvas, cv::COLOR_BGRA2BGR);
+                    cv::cvtColor(current_matrix, hsv_canvas, cv::COLOR_BGRA2BGR);
                     cv::cvtColor(hsv_canvas, hsv_canvas, cv::COLOR_BGR2HSV);
                     
-                    cv::inRange(hsv_canvas, cv::Scalar(35, 50, 50), cv::Scalar(75, 255, 255), mask);
-                    int green_pixel_density = cv::countNonZero(mask);
-                    
-                    if (green_pixel_density > 150) {
-                        stealth.sleep_gaussian(185.0, 15.0);
-                        
-                        input_hold.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-                        silent_api.CallSendInput(1, &input_hold, sizeof(INPUT));
-                        
-                        current_state = BotState::STATE_2_WAITING_FOR_BITE;
-                        current_log = OBS("Green target threshold matched! Releasing click perfectly.");
-                        refresh_cli_interface(current_state, current_log, successful_cycles);
-                        gauge_scanned = false;
+                    cv::Vec3b telemetry_validator_pixel = hsv_canvas.at<cv::Vec3b>(683, 300); 
+                    if (telemetry_validator_pixel[2] >= 200) { 
+                        current_lifecycle = PipelineStatus::LIFECYCLE_PROCESS_TELEMETRY;
+                        operational_log = OBS("Hardware telemetry signal validated. Pumping processing matrix.");
+                        update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                        streaming_context = false;
+                        telemetry.inject_delay_distribution(100, 10);
                     }
-
-                    if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start_gauge_timer).count() > 4) {
-                        input_hold.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-                        silent_api.CallSendInput(1, &input_hold, sizeof(INPUT));
-                        current_state = BotState::STATE_0_STANDBY;
-                        current_log = OBS("Casting timed out or broke structure. Reverting to Standby.");
-                        refresh_cli_interface(current_state, current_log, successful_cycles);
-                        gauge_scanned = false;
-                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(30)); 
                 }
                 break;
             }
 
-            case BotState::STATE_2_WAITING_FOR_BITE: {
-                bool waiting_bite = true;
-                while (waiting_bite) {
-                    if ((stealth.verify_key_state(0x58) & 0x8000) || (stealth.verify_key_state(0x30) & 0x8000)) {
-                        waiting_bite = false; break;
-                    }
+            case PipelineStatus::LIFECYCLE_PROCESS_TELEMETRY: {
+                bool synchronization_pipeline = true;
 
-                    if (!camera.grab_latest_frame(current_frame)) continue;
+                while (synchronization_pipeline) {
+                    if (telemetry.intercept_hardware_state(0x58) & 0x8000) { synchronization_pipeline = false; break; }
+
+                    if (!camera.fetch_active_matrix(current_matrix)) continue;
+
+                    cv::cvtColor(current_matrix, hsv_canvas, cv::COLOR_BGRA2BGR);
+                    cv::cvtColor(hsv_canvas, hsv_canvas, cv::COLOR_BGR2HSV);
+
+                    int highest_occupied_cluster_x = 187; 
                     
-                    bool text_ui_found = false; 
-                    stealth.sleep_gaussian(1500, 50); 
-                    text_ui_found = true; 
-
-                    if (text_ui_found) {
-                        current_state = BotState::TAPPING_MINIGAME_LOOP;
-                        current_log = OBS("UI 'Click Fast!' captured on frame engine. Transitioning to solver.");
-                        refresh_cli_interface(current_state, current_log, successful_cycles);
-                        waiting_bite = false;
-                    }
-                }
-                break;
-            }
-
-            case BotState::TAPPING_MINIGAME_LOOP: {
-                bool minigame_running = true;
-                int dynamic_click_count = 0;
-
-                while (minigame_running) {
-                    if ((stealth.verify_key_state(0x58) & 0x8000) || (stealth.verify_key_state(0x30) & 0x8000)) {
-                        minigame_running = false; break;
+                    for (int x = 187; x <= 532; ++x) {
+                        cv::Vec3b pixel = hsv_canvas.at<cv::Vec3b>(683, x); 
+                        if (pixel[1] >= 50 && pixel[2] >= 50) { 
+                            highest_occupied_cluster_x = x; 
+                        }
                     }
 
-                    if (!camera.grab_latest_frame(current_frame)) continue;
-                    int simulated_tension_percentage = 35; 
+                    double current_load_ratio = ((highest_occupied_cluster_x - 187) / 345.0) * 100.0;
 
-                    if (simulated_tension_percentage < cfg.tension_low_bound) {
-                        double fatigue_extension = dynamic_click_count * 0.45;
-                        double humanized_tap_delay = cfg.base_tap_delay + fatigue_extension;
-                        
-                        stealth.send_keyboard_tap(0x39); 
-                        
-                        current_log = OBS("Tension stable. Tapping Spacebar -> Pulse Jitter: ") + std::to_string(static_cast<int>(humanized_tap_delay)) + "ms";
-                        refresh_cli_interface(current_state, current_log, successful_cycles);
-                        
-                        stealth.sleep_gaussian(humanized_tap_delay, 12.0);
-                        dynamic_click_count++;
+                    if (current_load_ratio >= 70.0) {
+                        operational_log = OBS("Buffer overload threshold hit (") + std::to_string(static_cast<int>(current_load_ratio)) + OBS("%). Suspending telemetry injector.");
+                        update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                        telemetry.inject_delay_distribution(120.0, 15.0);
                     } 
-                    else if (simulated_tension_percentage > cfg.tension_high_bound) {
-                        current_log = OBS("Tension high (") + std::to_string(simulated_tension_percentage) + OBS("%). Relaxing fingers to secure line durability...");
-                        refresh_cli_interface(current_state, current_log, successful_cycles);
-                        stealth.sleep_gaussian(380.0, 35.0);
+                    else if (current_load_ratio <= 40.0) {
+                        telemetry.dispatch_hardware_stroke(0x39); 
+                        operational_log = OBS("Buffer exhaustion floor matched (") + std::to_string(static_cast<int>(current_load_ratio)) + OBS("%). Accelerating injection pulse.");
+                        update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                        telemetry.inject_delay_distribution(env_cfg.pulse_interval, 8.0);
+                    } 
+                    else {
+                        double humanized_jitter_delay = env_cfg.pulse_interval + (current_load_ratio * 0.4);
+                        telemetry.dispatch_hardware_stroke(0x39);
+                        operational_log = OBS("Subsystem load stabilizing (") + std::to_string(static_cast<int>(current_load_ratio)) + OBS("%). Maintaining telemetry current.");
+                        update_system_diagnostic_display(current_lifecycle, operational_log, successes);
+                        telemetry.inject_delay_distribution(humanized_jitter_delay, 12.0);
                     }
 
-                    if (dynamic_click_count >= cfg.target_clicks) { 
-                        minigame_running = false;
+                    cv::Vec3b lifecycle_closure_pixel = hsv_canvas.at<cv::Vec3b>(683, 300);
+                    if (lifecycle_closure_pixel[1] <= 20 && lifecycle_closure_pixel[2] <= 40) {
+                        successful_bursts++;
+                        current_lifecycle = PipelineStatus::LIFECYCLE_INITIALIZE_PULSE; 
+                        operational_log = OBS("Data lifecycle transaction verified success! Instantiating loop iteration...");
+                        update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                        
+                        telemetry.inject_delay_distribution(2500, 200); 
+                        telemetry.dispatch_hardware_stroke(0x12);   // Autoloop stroke 'E' scan code
+                        synchronization_pipeline = false;
                     }
-                }
-
-                if (current_state == BotState::TAPPING_MINIGAME_LOOP) {
-                    successful_cycles++;
-                    current_state = BotState::STATE_0_STANDBY; 
-                    current_log = OBS("Cycle successfully completed. Auto-returned to STANDBY. Press [E] to fish again!");
-                    refresh_cli_interface(current_state, current_log, successful_cycles);
-                    stealth.sleep_gaussian(2000, 200);
                 }
                 break;
             }
