@@ -3,7 +3,7 @@
 #include <string>
 
 // ==============================================================================
-#define SYSTEM_CORE_KEY 'K'
+#define SYSTEM_CORE_KEY 'Z' // Mengubah kunci ke 'Z' untuk menghindari Null-Truncation
 // ==============================================================================
 
 inline std::string OBS(std::string data) {
@@ -24,17 +24,18 @@ private:
 
 public:
     SilentAPI() {
-        // "user32.dll" -> "\x1D\x3B\x3D\x3A\x3B\x2A\x66\x2C\x24\x24"
-        HMODULE hUser32 = GetModuleHandleA(OBS("\x1D\x3B\x3D\x3A\x3B\x2A\x66\x2C\x24\x24").c_str());
+        // Teks asli: "user32.dll" -> Di-XOR dengan 'Z' 
+        HMODULE hUser32 = GetModuleHandleA(OBS("\x2F\x29\x3F\x28\x69\x68\x74\x3E\x36\x36").c_str());
         if (!hUser32) {
-            hUser32 = LoadLibraryA(OBS("\x1D\x3B\x3D\x3A\x3B\x2A\x66\x2C\x24\x24").c_str());
+            hUser32 = LoadLibraryA(OBS("\x2F\x29\x3F\x28\x69\x68\x74\x3E\x36\x36").c_str());
         }
 
         if (hUser32) {
-            // "GetAsyncKeyState"
-            _GetAsyncKeyState = (fnGetAsyncKeyState)GetProcAddress(hUser32, OBS("\x2D\x2D\x3C\x0F\x2D\x31\x13\x3D\x31\x33\x3B\x3B\x1F\x33\x3B\x3D").c_str());
-            // "SendInput"
-            _SendInput = (fnSendInput)GetProcAddress(hUser32, OBS("\x3D\x3D\x26\x2C\x01\x26\x38\x3D\x3C").c_str());
+            // Teks asli: "GetAsyncKeyState" -> Di-XOR dengan 'Z' (Bebas dari \x00)
+            _GetAsyncKeyState = (fnGetAsyncKeyState)GetProcAddress(hUser32, OBS("\x1D\x3F\x2E\x1B\x29\x23\x34\x39\x11\x3F\x23\x09\x2E\x3B\x2E\x3F").c_str());
+            
+            // Teks asli: "SendInput" -> Di-XOR dengan 'Z'
+            _SendInput = (fnSendInput)GetProcAddress(hUser32, OBS("\x09\x3F\x34\x3E\x13\x34\x2A\x2F\x2E").c_str());
         }
     }
 
