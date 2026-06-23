@@ -212,7 +212,7 @@ int main() {
                         double humanized_jitter_delay = env_cfg.pulse_interval + (current_load_ratio * 0.4);
                         telemetry.dispatch_hardware_stroke(0x39);
                         operational_log = OBS("Subsystem load stabilizing (") + std::to_string(static_cast<int>(current_load_ratio)) + OBS("%). Maintaining telemetry current.");
-                        update_system_diagnostic_display(current_lifecycle, operational_log, successes);
+                        update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts); // ✅ Nama variabel selaras
                         telemetry.inject_delay_distribution(humanized_jitter_delay, 12.0);
                     }
 
