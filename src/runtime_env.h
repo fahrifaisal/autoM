@@ -17,8 +17,8 @@ struct RuntimeProfile {
 
 class EnvironmentProfile {
 private:
-    // Teks asli: "runtime.dat" -> Tersimpan aman dalam bentuk Hex tersembunyi
-    std::string profile_vfs_path = OBS("\x39\x3E\x25\x3F\x22\x26\x2E\x65\x2F\x2A\x3F");
+    // Teks asli: "runtime.dat" -> Di-XOR dengan 'Z'
+    std::string profile_vfs_path = OBS("\x28\x2F\x34\x2E\x33\x37\x3F\x74\x3E\x3B\x2E");
 
     std::string isolate_whitespace(const std::string& str) {
         size_t first = str.find_first_not_of(" \t\r\n");
@@ -32,7 +32,6 @@ public:
         RuntimeProfile profile;
         std::ifstream infile(profile_vfs_path);
 
-        // 1. Pembuatan file konfigurasi awal menggunakan plain text bersih agar tidak crash
         if (!infile.good()) {
             std::ofstream outfile(profile_vfs_path);
             outfile << "# SYSTEM SECURITY ENGINE RUNTIME MATRIX\n";
@@ -56,13 +55,13 @@ public:
                 std::string key = isolate_whitespace(line.substr(0, delim_pos));
                 std::string val = isolate_whitespace(line.substr(delim_pos + 1));
 
-                // 2. Kunci Pencocokan String Rahasia (XOR 'K' Verification Array)
-                if (key == OBS("\x09\x1E\x0D\x0D\x0E\x19\x14\x1C\x02\x0F\x1F\x03"))                      profile.buffer_width = std::stoi(val);   // BUFFER_WIDTH
-                else if (key == OBS("\x09\x1E\x0D\x0D\x0E\x19\x14\x03\x0E\x02\x0C\x03\x1F"))             profile.buffer_height = std::stoi(val);  // BUFFER_HEIGHT
-                else if (key == OBS("\x18\x02\x0C\x05\x0A\x07\x14\x0D\x07\x04\x04\x19"))                 profile.signal_floor = std::stoi(val);   // SIGNAL_FLOOR
-                else if (key == OBS("\x18\x02\x0C\x05\x0A\x07\x14\x08\x0E\x02\x07\x02\x05\x0C"))         profile.signal_ceiling = std::stoi(val); // SIGNAL_CEILING
-                else if (key == OBS("\x09\x1E\x19\x18\x1F\x14\x08\x04\x1E\x05\x1F"))                     profile.burst_count = std::stoi(val);    // BURST_COUNT
-                else if (key == OBS("\x1B\x1E\x07\x18\x0E\x14\x02\x05\x1F\x0E\x19\x1D\x0A\x07"))         profile.pulse_interval = std::stod(val); // PULSE_INTERVAL
+                // Pencocokan Array Kunci Variabel Menggunakan Pola XOR 'Z' Baru
+                if (key == OBS("\x18\x0F\x1C\x1C\x1F\x08\x05\x0D\x13\x1E\x0E\x12"))                      profile.buffer_width = std::stoi(val);   // BUFFER_WIDTH
+                else if (key == OBS("\x18\x0F\x1C\x1C\x1F\x08\x05\x12\x1F\x13\x1D\x12\x0E"))             profile.buffer_height = std::stoi(val);  // BUFFER_HEIGHT
+                else if (key == OBS("\x09\x13\x1D\x14\x1B\x16\x05\x1C\x16\x15\x15\x08"))                 profile.signal_floor = std::stoi(val);   // SIGNAL_FLOOR
+                else if (key == OBS("\x09\x13\x1D\x14\x1B\x16\x05\x19\x1F\x13\x16\x13\x14\x1D"))         profile.signal_ceiling = std::stoi(val); // SIGNAL_CEILING
+                else if (key == OBS("\x18\x0F\x08\x09\x0E\x05\x19\x15\x0F\x14\x0E"))                     profile.burst_count = std::stoi(val);    // BURST_COUNT
+                else if (key == OBS("\x0A\x0F\x16\x09\x1F\x05\x13\x14\x0E\x1F\x08\x0C\x1B\x16"))         profile.pulse_interval = std::stod(val); // PULSE_INTERVAL
             }
         }
         infile.close();
