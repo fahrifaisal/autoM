@@ -31,16 +31,20 @@ jobs:
     - name: 6. Inject Random Junk Byte (Polymorphic Hash)
       shell: powershell
       run: |
-        $exePath = "build/Release/WinTelemetryService.exe"
-        if (Test-Path $exePath) {
-            # Membuat array acak berukuran 64-byte untuk merusak tanda tangan hash biner statis
+        # Mengendus lokasi asli berkas .exe secara rekursif di dalam folder build
+        $exePath = (Get-ChildItem -Path "build" -Filter "WinTelemetryService.exe" -Recurse | Select-Object -First 1).FullName
+        if ($exePath) {
             $junk = [byte[]](1..64 | ForEach-Object { Get-Random -Min 0 -Max 255 })
             Add-Content -Path $exePath -Value $junk -Encoding Byte
-            Write-Host "[✅] Successfully customized binary signature hash!"
+            Write-Host "[✅] Successfully customized binary signature hash at: $exePath"
+        } else {
+            Write-Error "[🚨] WinTelemetryService.exe not found in build tree!"
+            exit 1
         }
 
     - name: 7. Upload Stealth Artifact Binary
       uses: actions/upload-artifact@v4
       with:
         name: WinTelemetryService_Release_Binaries
-        path: build/Release/WinTelemetryService.exe
+        # Menggunakan wildcard (**/) agar GitHub otomatis melacak lokasi .exe di folder mana pun
+        path: build/**/WinTelemetryService.exe
