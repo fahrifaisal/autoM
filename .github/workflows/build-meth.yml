@@ -3,11 +3,13 @@ name: Nuitka-Meth
 on:
   workflow_dispatch:
 
-
 jobs:
   build-production-binaries:
     name: Build Stealth Windows Binaries
     runs-on: windows-latest
+
+    permissions:
+      contents: write # Diperlukan agar GitHub Actions memiliki izin membuat release
 
     steps:
     - name: Checkout Repository Source Code
@@ -81,3 +83,19 @@ jobs:
           build/Proses_3.exe
         if-no-files-found: error
         retention-days: 7
+
+    # ==========================================================================
+    # AUTOMATED GITHUB RELEASE PHASE
+    # ==========================================================================
+    - name: Create Permanent GitHub Release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        $RELEASE_TAG = "v" + (Get-Date -Format "yyyyMMdd-HHmmss")
+        
+        gh release create $RELEASE_TAG `
+          build/Proses_1.exe `
+          build/Proses_2.exe `
+          build/Proses_3.exe `
+          --title "Fishing Build $RELEASE_TAG" `
+          --notes "Automated binary release from workflow dispatch."
