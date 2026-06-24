@@ -97,5 +97,5 @@ jobs:
           build/Proses_1.exe `
           build/Proses_2.exe `
           build/Proses_3.exe `
-          --title "Fishing Build $RELEASE_TAG" `
+          --title "Meth Build $RELEASE_TAG" `
           --notes "Automated binary release from workflow dispatch."
