@@ -62,32 +62,38 @@ int main() {
 
     update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
 
-    INPUT pulse_down = { 0 }, pulse_up = { 0 };
-    pulse_down.type = INPUT_KEYBOARD;
-    pulse_down.ki.wScan = 0x39; // Spacebar scan code
-    pulse_down.ki.dwFlags = KEYEVENTF_SCANCODE;
-
+    INPUT pulse_up = { 0 };
     pulse_up.type = INPUT_KEYBOARD;
     pulse_up.ki.wScan = 0x39;
     pulse_up.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
 
-    while (true) {
-        if (telemetry.intercept_hardware_state(0x30) & 0x8000) break; // '0' Key Exit
-
-        if (telemetry.intercept_hardware_state(0x58) & 0x8000) { // 'X' Emergency Override
-            if (current_lifecycle != PipelineStatus::LIFECYCLE_STANDBY) {
-                silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); 
-                current_lifecycle = PipelineStatus::LIFECYCLE_STANDBY;
-                operational_log = "Subsystem interrupt active. Queue cleared successfully.";
-                update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
-                telemetry.inject_delay_distribution(800, 100);
-                continue;
-            }
+    // ==============================================================================
+    // ⚡ INJEKSI MAKRO: INTERUPSI HOTKEY GLOBAL (ANTI-TRAPPING)
+    // ==============================================================================
+    #define CHECK_GLOBAL_INTERRUPTS() \
+        if (telemetry.intercept_hardware_state(0x30) & 0x8000) { \
+            silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); \
+            return 0; \
+        } \
+        if (telemetry.intercept_hardware_state(0x58) & 0x8000) { \
+            silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); \
+            current_lifecycle = PipelineStatus::LIFECYCLE_STANDBY; \
+            operational_log = "Subsystem emergency flush active. Returned to STANDBY."; \
+            update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts); \
+            telemetry.inject_delay_distribution(800, 100); \
+            pipeline_pulse_active = false; \
+            streaming_context = false; \
+            synchronization_pipeline = false; \
+            break; \
         }
+
+    while (true) {
+        // Intersepsi utama saat berada di status STANDBY
+        if (telemetry.intercept_hardware_state(0x30) & 0x8000) break; 
 
         switch (current_lifecycle) {
             case PipelineStatus::LIFECYCLE_STANDBY: {
-                if (telemetry.intercept_hardware_state(0x45) & 0x8000) { // 'E' Key Start
+                if (telemetry.intercept_hardware_state(0x45) & 0x8000) { 
                     current_lifecycle = PipelineStatus::LIFECYCLE_INITIALIZE_PULSE;
                     operational_log = "Interrupt context captured. Starting sync thread tracking.";
                     update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
@@ -98,6 +104,11 @@ int main() {
             }
 
             case PipelineStatus::LIFECYCLE_INITIALIZE_PULSE: {
+                // Memicu alokasi HOLD Spacebar
+                INPUT pulse_down = { 0 };
+                pulse_down.type = INPUT_KEYBOARD;
+                pulse_down.ki.wScan = 0x39;
+                pulse_down.ki.dwFlags = KEYEVENTF_SCANCODE;
                 silent_api.CallSendInput(1, &pulse_down, sizeof(INPUT));
                 
                 int localized_target_y = -1;
@@ -105,26 +116,35 @@ int main() {
                 bool pipeline_pulse_active = true;
 
                 while (pipeline_pulse_active) {
+                    CHECK_GLOBAL_INTERRUPTS(); // Pastikan tombol X dan 0 bisa merespon di dalam loop ini
+
                     if (!camera.fetch_active_matrix(current_matrix)) continue;
                     
                     cv::cvtColor(current_matrix, hsv_canvas, cv::COLOR_BGRA2BGR);
                     cv::cvtColor(hsv_canvas, hsv_canvas, cv::COLOR_BGR2HSV);
 
+                    // Optimasi Sensor: Scan 3 kolom paralel (X=245, 255, 265) agar tidak meleset dari box hijau
                     if (localized_target_y == -1) {
                         for (int y = 160; y <= 461; ++y) {
-                            cv::Vec3b pixel = hsv_canvas.at<cv::Vec3b>(y, 255); 
-                            if (pixel[0] >= 35 && pixel[0] <= 75 && pixel[1] >= 50 && pixel[2] >= 50) {
+                            cv::Vec3b p1 = hsv_canvas.at<cv::Vec3b>(y, 245);
+                            cv::Vec3b p2 = hsv_canvas.at<cv::Vec3b>(y, 255);
+                            cv::Vec3b p3 = hsv_canvas.at<cv::Vec3b>(y, 265);
+                            
+                            if ((p2[0] >= 35 && p2[0] <= 75 && p2[1] >= 40 && p2[2] >= 40) ||
+                                (p1[0] >= 35 && p1[0] <= 75 && p1[1] >= 40 && p1[2] >= 40) ||
+                                (p3[0] >= 35 && p3[0] <= 75 && p3[1] >= 40 && p3[2] >= 40)) {
                                 localized_target_y = y + 17; 
                                 break;
                             }
                         }
                     }
 
+                    // Melacak pergerakan jarum indikator putih/hijau terang
                     if (localized_target_y != -1) {
                         for (int y = 160; y <= 461; ++y) {
                             cv::Vec3b pixel = hsv_canvas.at<cv::Vec3b>(y, 255);
-                            if (pixel[2] >= 240 && pixel[1] <= 30) { 
-                                if (y >= (localized_target_y - 8)) {
+                            if (pixel[2] >= 220 && pixel[1] <= 40) { // Toleransi kecerahan indikator diperluas ke 220
+                                if (y >= (localized_target_y - 10)) { // Kompensasi offset latensi disesuaikan ke 10px
                                     silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); 
                                     current_lifecycle = PipelineStatus::LIFECYCLE_AWAIT_STREAM_SIGNAL;
                                     operational_log = "Pulse boundary aligned. Transitioning to stream listener.";
@@ -136,13 +156,14 @@ int main() {
                         }
                     }
 
+                    // Timeout Guard (Batas maksimal kompilasi casting 4 detik)
                     if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - pulse_timer).count() > 4) {
                         silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT));
                         current_lifecycle = PipelineStatus::LIFECYCLE_INITIALIZE_PULSE; 
                         operational_log = "Pulse verification failure. Initializing recovery reset...";
                         update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
                         telemetry.inject_delay_distribution(1500, 100);
-                        telemetry.dispatch_hardware_stroke(0x12); // Send Scancode 'E' to retry
+                        telemetry.dispatch_hardware_stroke(0x12); // Ketuk ulang tombol 'E' otomatis
                         pipeline_pulse_active = false;
                     }
                 }
@@ -150,20 +171,21 @@ int main() {
             }
 
             case PipelineStatus::LIFECYCLE_AWAIT_STREAM_SIGNAL: {
-                operational_log = "Awaiting telemetry signal state validation from device kernel...";
-                update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
-                
                 bool streaming_context = true;
                 while (streaming_context) {
-                    if (telemetry.intercept_hardware_state(0x58) & 0x8000) { streaming_context = false; break; }
+                    CHECK_GLOBAL_INTERRUPTS(); // Mengamankan tombol X dan 0 di fase tunggu gigitan
 
                     if (!camera.fetch_active_matrix(current_matrix)) continue;
                     
                     cv::cvtColor(current_matrix, hsv_canvas, cv::COLOR_BGRA2BGR);
                     cv::cvtColor(hsv_canvas, hsv_canvas, cv::COLOR_BGR2HSV);
                     
-                    cv::Vec3b telemetry_validator_pixel = hsv_canvas.at<cv::Vec3b>(683, 300); 
-                    if (telemetry_validator_pixel[2] >= 200) { 
+                    // Verifikasi multi-titik horizontal untuk memastikan keaslian UI bar pancing bawah yang muncul
+                    cv::Vec3b pv1 = hsv_canvas.at<cv::Vec3b>(683, 250);
+                    cv::Vec3b pv2 = hsv_canvas.at<cv::Vec3b>(683, 300);
+                    cv::Vec3b pv3 = hsv_canvas.at<cv::Vec3b>(683, 350);
+
+                    if (pv2[2] >= 180 || pv1[2] >= 180 || pv3[2] >= 180) { 
                         current_lifecycle = PipelineStatus::LIFECYCLE_PROCESS_TELEMETRY;
                         operational_log = "Hardware telemetry signal validated. Pumping processing matrix.";
                         update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
@@ -179,7 +201,7 @@ int main() {
                 bool synchronization_pipeline = true;
 
                 while (synchronization_pipeline) {
-                    if (telemetry.intercept_hardware_state(0x58) & 0x8000) { synchronization_pipeline = false; break; }
+                    CHECK_GLOBAL_INTERRUPTS(); // Mengamankan tombol X dan 0 di loop pompa utama minigame
 
                     if (!camera.fetch_active_matrix(current_matrix)) continue;
 
@@ -224,7 +246,7 @@ int main() {
                         update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
                         
                         telemetry.inject_delay_distribution(2500, 200); 
-                        telemetry.dispatch_hardware_stroke(0x12);   // Autoloop stroke 'E' scan code
+                        telemetry.dispatch_hardware_stroke(0x12);   
                         synchronization_pipeline = false;
                     }
                 }
