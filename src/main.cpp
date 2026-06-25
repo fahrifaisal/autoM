@@ -67,9 +67,6 @@ int main() {
     pulse_up.ki.wScan = 0x39;
     pulse_up.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
 
-    // ==============================================================================
-    // ⚡ INTERUPSI HOTKEY GLOBAL (Bebas dari Variable Scope Error)
-    // ==============================================================================
     #define CHECK_GLOBAL_INTERRUPTS() \
         if (telemetry.intercept_hardware_state(0x30) & 0x8000) { \
             silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); \
@@ -109,7 +106,6 @@ int main() {
                 int localized_target_y = -1;
                 auto pulse_timer = std::chrono::steady_clock::now();
 
-                // Loop berjalan menggunakan validasi kondisi State aktif
                 while (current_lifecycle == PipelineStatus::LIFECYCLE_INITIALIZE_PULSE) {
                     CHECK_GLOBAL_INTERRUPTS(); 
 
@@ -118,33 +114,44 @@ int main() {
                     cv::cvtColor(current_matrix, hsv_canvas, cv::COLOR_BGRA2BGR);
                     cv::cvtColor(hsv_canvas, hsv_canvas, cv::COLOR_BGR2HSV);
 
-                    if (localized_target_y == -1) {
-                        for (int y = 160; y <= 461; ++y) {
-                            cv::Vec3b p1 = hsv_canvas.at<cv::Vec3b>(y, 245);
-                            cv::Vec3b p2 = hsv_canvas.at<cv::Vec3b>(y, 255);
-                            cv::Vec3b p3 = hsv_canvas.at<cv::Vec3b>(y, 265);
-                            
-                            if ((p2[0] >= 35 && p2[0] <= 75 && p2[1] >= 40 && p2[2] >= 40) ||
-                                (p1[0] >= 35 && p1[0] <= 75 && p1[1] >= 40 && p1[2] >= 40) ||
-                                (p3[0] >= 35 && p3[0] <= 75 && p3[1] >= 40 && p3[2] >= 40)) {
+                    int current_indicator_y = -1;
+
+                    // Multi-Garis Sensor Vertikal Paralel (X=245, X=255, X=265)
+                    for (int y = 160; y <= 461; ++y) {
+                        cv::Vec3b p1 = hsv_canvas.at<cv::Vec3b>(y, 245);
+                        cv::Vec3b p2 = hsv_canvas.at<cv::Vec3b>(y, 255); 
+                        cv::Vec3b p3 = hsv_canvas.at<cv::Vec3b>(y, 265);
+                        
+                        // Saringan 1: Deteksi Lokasi Box Target (Redup/Pasif)
+                        if (localized_target_y == -1) {
+                            if ((p2[0] >= env_cfg.box_h_min && p2[0] <= env_cfg.box_h_max && p2[1] >= env_cfg.box_s_min && p2[1] <= env_cfg.box_s_max && p2[2] >= env_cfg.box_v_min && p2[2] <= env_cfg.box_v_max) ||
+                                (p1[0] >= env_cfg.box_h_min && p1[0] <= env_cfg.box_h_max && p1[1] >= env_cfg.box_s_min && p1[1] <= env_cfg.box_s_max && p1[2] >= env_cfg.box_v_min && p1[2] <= env_cfg.box_v_max) ||
+                                (p3[0] >= env_cfg.box_h_min && p3[0] <= env_cfg.box_h_max && p3[1] >= env_cfg.box_s_min && p3[1] <= env_cfg.box_s_max && p3[2] >= env_cfg.box_v_min && p3[2] <= env_cfg.box_v_max)) {
                                 localized_target_y = y + 17; 
-                                break;
                             }
+                        }
+
+                        // Saringan 2: Deteksi Jarum Indikator Glow yang Sedang Bergerak (Sangat Terang)
+                        if ((p2[0] >= env_cfg.ind_h_min && p2[0] <= env_cfg.ind_h_max && p2[1] >= env_cfg.ind_s_min && p2[1] <= env_cfg.ind_s_max && p2[2] >= env_cfg.ind_v_min && p2[2] <= env_cfg.ind_v_max) ||
+                            (p1[0] >= env_cfg.ind_h_min && p1[0] <= env_cfg.ind_h_max && p1[1] >= env_cfg.ind_s_min && p1[1] <= env_cfg.ind_s_max && p1[2] >= env_cfg.ind_v_min && p1[2] <= env_cfg.ind_v_max) ||
+                            (p3[0] >= env_cfg.ind_h_min && p3[0] <= env_cfg.ind_h_max && p3[1] >= env_cfg.ind_s_min && p3[1] <= env_cfg.ind_s_max && p3[2] >= env_cfg.ind_v_min && p3[2] <= env_cfg.ind_v_max)) {
+                            current_indicator_y = y;
                         }
                     }
 
-                    if (localized_target_y != -1) {
-                        for (int y = 160; y <= 461; ++y) {
-                            cv::Vec3b pixel = hsv_canvas.at<cv::Vec3b>(y, 255);
-                            if (pixel[2] >= 220 && pixel[1] <= 40) { 
-                                if (y >= (localized_target_y - 10)) { 
-                                    silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); 
-                                    current_lifecycle = PipelineStatus::LIFECYCLE_AWAIT_STREAM_SIGNAL;
-                                    operational_log = "Pulse boundary aligned. Transitioning to stream listener.";
-                                    update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
-                                    break; 
-                                }
-                            }
+                    // LIVE TELEMETRY TUNING MATRIX
+                    operational_log = "[TUNING CAST] Box Y: " + 
+                                      (localized_target_y == -1 ? "SEARCHING" : std::to_string(localized_target_y)) + 
+                                      " | Ind Y: " + (current_indicator_y == -1 ? "BLIND" : std::to_string(current_indicator_y));
+                    update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+
+                    if (localized_target_y != -1 && current_indicator_y != -1) {
+                        if (current_indicator_y >= (localized_target_y - 10)) { // Offset kompensasi pegas rem keyboard
+                            silent_api.CallSendInput(1, &pulse_up, sizeof(INPUT)); 
+                            current_lifecycle = PipelineStatus::LIFECYCLE_AWAIT_STREAM_SIGNAL;
+                            operational_log = "Sync boundary locked! Advancing to stream signal tracking.";
+                            update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
+                            break; 
                         }
                     }
 
@@ -177,7 +184,7 @@ int main() {
                     cv::Vec3b pv2 = hsv_canvas.at<cv::Vec3b>(683, 300);
                     cv::Vec3b pv3 = hsv_canvas.at<cv::Vec3b>(683, 350);
 
-                    if (pv2[2] >= 180 || pv1[2] >= 180 || pv3[2] >= 180) { 
+                    if (pv2[2] >= env_cfg.stream_v_min || pv1[2] >= env_cfg.stream_v_min || pv3[2] >= env_cfg.stream_v_min) { 
                         current_lifecycle = PipelineStatus::LIFECYCLE_PROCESS_TELEMETRY;
                         operational_log = "Hardware telemetry signal validated. Pumping processing matrix.";
                         update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
@@ -202,7 +209,8 @@ int main() {
                     
                     for (int x = 187; x <= 532; ++x) {
                         cv::Vec3b pixel = hsv_canvas.at<cv::Vec3b>(683, x); 
-                        if (pixel[1] >= 50 && pixel[2] >= 50) { 
+                        if (pixel[0] >= env_cfg.reel_h_min && pixel[0] <= env_cfg.reel_h_max &&
+                            pixel[1] >= env_cfg.reel_s_min && pixel[2] >= env_cfg.reel_v_min) { 
                             highest_occupied_cluster_x = x; 
                         }
                     }
@@ -210,20 +218,20 @@ int main() {
                     double current_load_ratio = ((highest_occupied_cluster_x - 187) / 345.0) * 100.0;
 
                     if (current_load_ratio >= 70.0) {
-                        operational_log = "Buffer overload threshold hit (" + std::to_string(static_cast<int>(current_load_ratio)) + "%). Suspending telemetry injector.";
+                        operational_log = "[LIVE REEL] Ratio: " + std::to_string(static_cast<int>(current_load_ratio)) + "% | Overload Danger Area!";
                         update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
                         telemetry.inject_delay_distribution(120.0, 15.0);
                     } 
                     else if (current_load_ratio <= 40.0) {
                         telemetry.dispatch_hardware_stroke(0x39); 
-                        operational_log = "Buffer exhaustion floor matched (" + std::to_string(static_cast<int>(current_load_ratio)) + "%). Accelerating injection pulse.";
+                        operational_log = "[LIVE REEL] Ratio: " + std::to_string(static_cast<int>(current_load_ratio)) + "% | Injection Pumping Base.";
                         update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
                         telemetry.inject_delay_distribution(env_cfg.pulse_interval, 8.0);
                     } 
                     else {
                         double humanized_jitter_delay = env_cfg.pulse_interval + (current_load_ratio * 0.4);
                         telemetry.dispatch_hardware_stroke(0x39);
-                        operational_log = "Subsystem load stabilizing (" + std::to_string(static_cast<int>(current_load_ratio)) + "%). Maintaining telemetry current.";
+                        operational_log = "[LIVE REEL] Ratio: " + std::to_string(static_cast<int>(current_load_ratio)) + "% | Stabilization Mode.";
                         update_system_diagnostic_display(current_lifecycle, operational_log, successful_bursts);
                         telemetry.inject_delay_distribution(humanized_jitter_delay, 12.0);
                     }
